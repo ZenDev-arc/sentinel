@@ -208,10 +208,10 @@ const capabilities = [
 ]
 
 const techStack = [
-  ['LangGraph','orchestration'], ['ChromaDB','vector store'],
-  ['SBERT','embeddings'],        ['FastAPI','webhook server'],
-  ['Docker','sandbox'],          ['APScheduler','cron jobs'],
-  ['Claude API','llm (strong)'], ['Ollama','llm (local)'],
+  ['LangGraph','orchestration'],    ['ChromaDB','vector store'],
+  ['SBERT','embeddings'],           ['FastAPI','webhook server'],
+  ['Docker','sandbox'],             ['APScheduler','cron jobs'],
+  ['Groq','llm primary (free)'],    ['HuggingFace','llm fallback (free)'],
 ]
 
 /* ── Page ───────────────────────────────────────────────────────────────────── */
@@ -244,7 +244,7 @@ export default function Home() {
                 <div className="flex items-center gap-3 mt-7 flex-wrap">
                   <span className="font-mono text-xs text-text-muted">works with</span>
                   <span className="font-mono text-xs text-text-muted">→</span>
-                  {['claude', 'ollama', 'github', 'chroma'].map(s => (
+                  {['groq', 'huggingface', 'github', 'chroma'].map(s => (
                     <span key={s} className="font-mono text-xs border border-bg-border px-2.5 py-1 text-text-muted hover:text-orange-400 hover:border-orange-500/40 transition-colors cursor-default">{s}</span>
                   ))}
                 </div>
@@ -262,7 +262,8 @@ export default function Home() {
           </h1>
           <div className="mt-8 flex flex-col sm:flex-row gap-6 sm:items-start">
             <p className="font-mono text-sm text-text-muted max-w-xs leading-relaxed">
-              19 agents. 5 swarms. self-healing knowledge base. open source and completely free.
+              19 agents. 5 swarms. self-healing knowledge base.<br />
+              <span className="text-orange-400/80">pip install zendev-sentinel</span>
             </p>
             <div className="flex gap-3 flex-wrap">
               <Link to="/docs" className="btn-primary">deploy sentinel →</Link>
