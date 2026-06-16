@@ -116,3 +116,8 @@
   .divider { @apply border-t border-bg-border; }
   .accent-border { @apply border-l-2 border-l-orange-500; }
 }
+
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}

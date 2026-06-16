@@ -33,8 +33,18 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center">
 
         {/* Logo — left */}
-        <NavLink to="/" className="flex items-center gap-2 shrink-0 group">
-          <span className="font-display font-bold text-[14px] text-white group-hover:text-orange-400 transition-colors tracking-tight">
+        <NavLink to="/" className="flex items-center gap-2 shrink-0">
+          <span
+            className="font-display font-bold text-[14px] tracking-tight"
+            style={{
+              background: 'linear-gradient(90deg, #ffffff 0%, #ffffff 30%, #f97316 50%, #ffffff 70%, #ffffff 100%)',
+              backgroundSize: '200% auto',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              animation: 'shimmer 3s linear infinite',
+            }}
+          >
             sentinel
           </span>
         </NavLink>
