@@ -34,9 +34,6 @@ export default function Navbar() {
 
         {/* Logo — left */}
         <NavLink to="/" className="flex items-center gap-2 shrink-0 group">
-          <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-            <path d="M11 2L4 11h6l-1 7 7-9h-6l1-7z" fill="#f97316" strokeLinejoin="round" />
-          </svg>
           <span className="font-display font-bold text-[14px] text-white group-hover:text-orange-400 transition-colors tracking-tight">
             sentinel
           </span>
