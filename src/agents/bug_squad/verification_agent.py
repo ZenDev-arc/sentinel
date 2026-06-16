@@ -17,10 +17,12 @@ Patches are applied in isolation — the original archive is never mutated.
 from __future__ import annotations
 
 import difflib
+import shlex
 import tarfile
 from io import BytesIO
 
 from src.core.logging import get_logger
+from src.core.project_utils import detect_project_type
 from src.core.sandbox import Sandbox
 from src.core.state import BugReport, FixClassification, PipelineState, ProposedFix
 
@@ -69,6 +71,15 @@ def _make_unified_diff(original: str, fixed: str, filename: str) -> str:
     return "".join(diff)
 
 
+def _make_test_command(failing_test: str, project_type: str) -> tuple[str, bool]:
+    """Return (test_command, is_jest) for the given test name and project type."""
+    if project_type == "javascript":
+        # Jest: run only the specific failing test by name pattern
+        safe = failing_test.replace("›", ">").strip()
+        return f'jest --no-coverage --forceExit --testEnvironment node -t {shlex.quote(safe)}', True
+    return f"pytest {shlex.quote(failing_test)} -x --tb=short -q", False
+
+
 def run(state: PipelineState, sandbox: Sandbox) -> dict:
     log.info("verification_agent_start", reports=len(state.bug_reports))
 
@@ -82,6 +93,7 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
 
     updated_reports: list[BugReport] = []
     proposed_fixes: list[ProposedFix] = list(state.proposed_fixes)
+    project_type = detect_project_type(state.pr.files_changed if state.pr else [])
 
     for report in state.bug_reports:
         if report.verified or not report.candidate_patches:
@@ -118,13 +130,18 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
             log.info("testing_fix", test=report.failing_test, file=file_path,
                      confidence=candidate.get("confidence"))
 
-            # Build test_name relative to workspace (strip leading path components)
-            test_name = report.failing_test
-            result = sandbox.run_tests(
-                repo_archive=state.repo_archive,
-                test_command=f"pytest {test_name} -x --tb=short -q",
-                extra_files={file_path: fixed_content},
-            )
+            test_cmd, is_jest = _make_test_command(report.failing_test, project_type)
+            if is_jest:
+                result = sandbox.run_js_tests(
+                    repo_archive=state.repo_archive,
+                    extra_files={file_path: fixed_content},
+                )
+            else:
+                result = sandbox.run_tests(
+                    repo_archive=state.repo_archive,
+                    test_command=test_cmd,
+                    extra_files={file_path: fixed_content},
+                )
 
             if result.exit_code == 0 and result.failed == 0 and result.passed > 0:
                 selected_patch = candidate

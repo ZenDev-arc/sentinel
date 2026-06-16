@@ -82,6 +82,7 @@ from src.agents.test_swarm import (
 )
 from src.agents.trust_layer import approval_gate, explainability_agent
 from src.core.logging import get_logger
+from src.core.project_utils import detect_project_type
 from src.core.sandbox import Sandbox
 from src.core.state import PipelineState, PipelineStatus, RiskLevel
 from src.knowledge_base.store import KnowledgeBaseStore
@@ -138,17 +139,6 @@ def node_generate_tests(state: PipelineState) -> dict:
     return module_test_agent.run(state, get_kb())
 
 
-def _detect_project_type(files_changed: list[str]) -> str:
-    """Returns 'python', 'javascript', or 'mixed' based on file extensions."""
-    has_py = any(f.endswith(".py") for f in files_changed)
-    has_js = any(f.endswith((".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs")) for f in files_changed)
-    if has_py and has_js:
-        return "mixed"
-    if has_js:
-        return "javascript"
-    return "python"
-
-
 def node_run_tests(state: PipelineState) -> dict:
     """Write generated tests to sandbox and run the full suite."""
     from src.integrations.git_utils import archive_pr_branch
@@ -159,26 +149,7 @@ def node_run_tests(state: PipelineState) -> dict:
 
     from src.core.state import TestResult
 
-    # For pure JS/TS projects: sandbox can't run npm tests without network to install
-    # dependencies. Skip gracefully — the review swarm still runs in full.
-    project_type = _detect_project_type(pr.files_changed)
-    if project_type == "javascript":
-        log.info("sandbox_skipped_js_project", files=len(pr.files_changed))
-        return {
-            "test_results": [TestResult(
-                module="all",
-                passed=0, failed=0, errors=0,
-                coverage_percent=None,
-                failing_tests=[],
-                stdout=(
-                    "Sandbox tests skipped for JavaScript/TypeScript project.\n"
-                    "The sandbox runs without network access and cannot install npm dependencies.\n"
-                    "Full code review and security analysis were still performed above."
-                ),
-                stderr="",
-            )],
-            "status": PipelineStatus.TESTING,
-        }
+    project_type = detect_project_type(pr.files_changed)
 
     extra_files: dict[str, str] = {}
     for gt in state.generated_tests:
@@ -198,18 +169,49 @@ def node_run_tests(state: PipelineState) -> dict:
             return {"test_results": [], "errors": state.errors + [f"Sandbox archive failed: {exc}"]}
 
     sandbox = get_sandbox()
-    result = sandbox.run_tests(repo_archive, extra_files=extra_files)
 
-    test_result = TestResult(
-        module="all",
-        passed=result.passed,
-        failed=result.failed,
-        errors=result.errors,
-        coverage_percent=result.coverage_percent,
-        failing_tests=_extract_failing_tests(result.stdout),
-        stdout=result.stdout[:8000],
-        stderr=result.stderr[:2000],
-    )
+    if project_type == "javascript":
+        log.info("sandbox_running_jest", files=len(pr.files_changed))
+        result = sandbox.run_js_tests(repo_archive, extra_files=extra_files)
+        # If jest found no tests at all (no test files in project), report gracefully
+        if result.exit_code != 0 and result.passed == 0 and result.failed == 0:
+            log.info("sandbox_jest_no_tests_found")
+            test_result = TestResult(
+                module="all",
+                passed=0, failed=0, errors=0,
+                coverage_percent=None,
+                failing_tests=[],
+                stdout=(
+                    "No test files found in this JavaScript/TypeScript project.\n"
+                    "Add test files matching *.test.ts / *.spec.ts to enable sandbox testing.\n\n"
+                    + result.stdout[:2000]
+                ),
+                stderr=result.stderr[:1000],
+            )
+        else:
+            test_result = TestResult(
+                module="all",
+                passed=result.passed,
+                failed=result.failed,
+                errors=result.errors,
+                coverage_percent=None,
+                failing_tests=_extract_failing_tests(result.stdout + result.stderr),
+                stdout=result.stdout[:8000],
+                stderr=result.stderr[:2000],
+            )
+    else:
+        result = sandbox.run_tests(repo_archive, extra_files=extra_files)
+        test_result = TestResult(
+            module="all",
+            passed=result.passed,
+            failed=result.failed,
+            errors=result.errors,
+            coverage_percent=result.coverage_percent,
+            failing_tests=_extract_failing_tests(result.stdout),
+            stdout=result.stdout[:8000],
+            stderr=result.stderr[:2000],
+        )
+
     # Store the archive so verification_agent can apply patches without re-fetching.
     return {
         "test_results": [test_result],
@@ -367,6 +369,16 @@ def compile_pipeline():
 
 def _extract_failing_tests(stdout: str) -> list[str]:
     import re
-    # pytest FAILED lines: "FAILED tests/test_foo.py::test_bar - AssertionError"
-    pattern = re.compile(r"FAILED\s+([\w/\.]+::[\w\[\]]+)")
-    return pattern.findall(stdout)
+    failing = []
+
+    # pytest: "FAILED tests/test_foo.py::test_bar - AssertionError"
+    for m in re.finditer(r"FAILED\s+([\w/\.]+::[\w\[\]]+)", stdout):
+        failing.append(m.group(1))
+
+    # jest: "  ● DescribeName › test name"
+    for m in re.finditer(r"^\s+●\s+(.+)$", stdout, re.MULTILINE):
+        name = m.group(1).strip()
+        if name and not name.startswith("●"):
+            failing.append(name)
+
+    return list(dict.fromkeys(failing))  # deduplicate, preserve order

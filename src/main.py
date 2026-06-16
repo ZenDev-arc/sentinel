@@ -102,14 +102,189 @@ SANDBOX_CPU_QUOTA=50000
     c.print()
 
 
+def cmd_github_setup(args: argparse.Namespace) -> None:
+    """Interactive wizard to create a GitHub App and configure the webhook."""
+    import secrets
+    from pathlib import Path
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.prompt import Confirm, Prompt
+    from rich.rule import Rule
+
+    c = Console()
+    c.print()
+    c.print(Panel.fit(
+        "[bold cyan]SENTINEL — GitHub App Setup[/bold cyan]\n"
+        "[dim]This wizard creates a GitHub App so SENTINEL can review your PRs automatically.[/dim]\n\n"
+        "Estimated time: [bold]3 minutes[/bold]",
+        border_style="cyan",
+    ))
+    c.print()
+
+    # ── Step 1: Webhook secret ────────────────────────────────────────────────
+    c.print(Rule("[bold]Step 1 of 4[/bold] — Generate webhook secret", style="cyan"))
+    webhook_secret = secrets.token_hex(32)
+    c.print(f"\n  Generated secret: [bold yellow]{webhook_secret}[/bold yellow]")
+    c.print("  [dim]Copy this — you'll paste it into GitHub in the next step.[/dim]\n")
+
+    # ── Step 2: ngrok tunnel (local dev) ─────────────────────────────────────
+    c.print(Rule("[bold]Step 2 of 4[/bold] — Tunnel URL (local dev)", style="cyan"))
+    c.print("\n  GitHub needs a public HTTPS URL to send webhooks to.")
+    c.print("  For [bold]local development[/bold], we can start an ngrok tunnel for you.")
+    c.print("  For [bold]production[/bold], you'll use your server's public URL instead.\n")
+
+    public_url: str = ""
+    use_ngrok = Confirm.ask("  Start an ngrok tunnel now for local dev?", default=True)
+    if use_ngrok:
+        try:
+            from pyngrok import ngrok as _ngrok
+            port = args.port if hasattr(args, "port") else 8000
+            tunnel = _ngrok.connect(port, "http")
+            public_url = tunnel.public_url.replace("http://", "https://")
+            c.print(f"\n  [green]Tunnel started:[/green] [cyan]{public_url}[/cyan]")
+            c.print(f"  Webhook URL:   [bold]{public_url}/webhook/github[/bold]\n")
+        except ImportError:
+            c.print("\n  [yellow]pyngrok not installed.[/yellow] Install it with:")
+            c.print("    [bold]pip install pyngrok[/bold]\n")
+            public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
+            c.print()
+        except Exception as exc:
+            c.print(f"\n  [yellow]ngrok failed:[/yellow] {exc}")
+            public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
+            c.print()
+    else:
+        public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
+        c.print()
+
+    webhook_url = f"{public_url}/webhook/github"
+
+    # ── Step 3: Create GitHub App ─────────────────────────────────────────────
+    c.print(Rule("[bold]Step 3 of 4[/bold] — Create GitHub App", style="cyan"))
+    c.print()
+    c.print("  Open this URL in your browser:")
+    c.print("    [bold cyan]https://github.com/settings/apps/new[/bold cyan]\n")
+    c.print("  Fill in the form as follows:\n")
+    c.print("  [bold]GitHub App name:[/bold]  SENTINEL (or any name you like)")
+    c.print("  [bold]Homepage URL:[/bold]     https://github.com/ZenDev-arc/sentinel")
+    c.print(f"  [bold]Webhook URL:[/bold]     [cyan]{webhook_url}[/cyan]")
+    c.print(f"  [bold]Webhook secret:[/bold]  [yellow]{webhook_secret}[/yellow]")
+    c.print()
+    c.print("  [bold]Permissions → Repository permissions:[/bold]")
+    c.print("    Pull requests  → [green]Read & Write[/green]")
+    c.print("    Contents       → [green]Read & Write[/green]  (for auto-committing fixes)")
+    c.print("    Metadata       → [green]Read-only[/green]   (mandatory)")
+    c.print()
+    c.print("  [bold]Subscribe to events:[/bold]")
+    c.print("    [green]✓[/green] Pull request")
+    c.print("    [green]✓[/green] Push  [dim](optional — enables revert detection)[/dim]")
+    c.print()
+    c.print("  [bold]Where can this app be installed?[/bold]")
+    c.print("    → Only on this account  [dim](recommended for personal use)[/dim]")
+    c.print("    → Any account           [dim](if you want to share it)[/dim]")
+    c.print()
+    c.print("  Click [bold]Create GitHub App[/bold].")
+    c.print()
+    Prompt.ask("  Press [bold]Enter[/bold] once you've created the app")
+    c.print()
+
+    # ── Step 4: Collect App credentials ──────────────────────────────────────
+    c.print(Rule("[bold]Step 4 of 4[/bold] — Save credentials", style="cyan"))
+    c.print()
+    c.print("  After creating the app, GitHub shows the App settings page.")
+    c.print("  Copy the [bold]App ID[/bold] from the top of the page.\n")
+    app_id = Prompt.ask("  GitHub App ID").strip()
+
+    c.print()
+    c.print("  Scroll down on the App settings page to [bold]Private keys[/bold].")
+    c.print("  Click [bold]Generate a private key[/bold] — a .pem file will download.\n")
+    default_pem = str(Path.home() / ".sentinel" / "github-app.pem")
+    pem_path = Prompt.ask(
+        f"  Path to the downloaded .pem file",
+        default=default_pem,
+    ).strip()
+    pem_path = str(Path(pem_path).expanduser().resolve())
+
+    c.print()
+    c.print("  [bold]Install the App on your repository:[/bold]")
+    c.print("    → On the App page click [bold]Install App[/bold] (left sidebar)")
+    c.print("    → Select your account / organisation → install on the repo(s) you want reviewed")
+    c.print()
+    Prompt.ask("  Press [bold]Enter[/bold] once you've installed the app")
+
+    # ── Save to ~/.sentinel/.env ───────────────────────────────────────────────
+    sentinel_dir = Path.home() / ".sentinel"
+    sentinel_dir.mkdir(exist_ok=True)
+    env_file = sentinel_dir / ".env"
+
+    # Read existing content and update/append GitHub keys
+    existing = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
+
+    def _set_key(content: str, key: str, value: str) -> str:
+        import re
+        if re.search(rf"^{key}\s*=", content, re.MULTILINE):
+            return re.sub(rf"^{key}\s*=.*$", f"{key}={value}", content, flags=re.MULTILINE)
+        return content + f"\n{key}={value}"
+
+    existing = _set_key(existing, "GITHUB_APP_ID", app_id)
+    existing = _set_key(existing, "GITHUB_WEBHOOK_SECRET", webhook_secret)
+    existing = _set_key(existing, "GITHUB_APP_PRIVATE_KEY_PATH", pem_path)
+
+    env_file.write_text(existing, encoding="utf-8")
+
+    c.print()
+    c.print(f"[green]GitHub credentials saved →[/green] [cyan]{env_file}[/cyan]")
+    c.print()
+    c.print("[bold green]Done![/bold green]  Start the webhook server with:")
+    c.print("  [bold cyan]sentinel serve[/bold cyan]")
+    if use_ngrok:
+        c.print()
+        c.print(f"  [dim]ngrok tunnel:[/dim] [cyan]{public_url}[/cyan]")
+        c.print("  [dim]Keep this terminal open — the tunnel closes when you exit.[/dim]")
+    c.print()
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
+    from rich.console import Console
     from src.api.webhook import app
-    from src.core.logging import configure_logging
+    from src.core.config import settings
+    from src.core.logging import configure_logging, get_logger
     from src.scheduler.maintenance import start_scheduler
 
     configure_logging()
+    log = get_logger(__name__)
+    c = Console()
+
+    # ── Validate GitHub is configured ─────────────────────────────────────────
+    has_github_app = bool(settings.GITHUB_APP_ID and settings.github_app_private_key)
+    has_pat = bool(settings.GITHUB_TOKEN)
+    has_webhook_secret = bool(settings.GITHUB_WEBHOOK_SECRET)
+
+    c.print()
+    c.print("[bold cyan]SENTINEL[/bold cyan]  webhook server")
+    c.print()
+
+    if not has_webhook_secret:
+        c.print("[yellow]Warning:[/yellow] GITHUB_WEBHOOK_SECRET is not set.")
+        c.print("  All incoming webhooks will be rejected.")
+        c.print("  Run [bold]sentinel github-setup[/bold] to configure.\n")
+
+    if not has_github_app and not has_pat:
+        c.print("[yellow]Warning:[/yellow] No GitHub authentication configured.")
+        c.print("  SENTINEL can receive webhooks but cannot post comments or commit fixes.")
+        c.print("  Set GITHUB_TOKEN (simple) or run [bold]sentinel github-setup[/bold] (full App).\n")
+
+    auth_mode = "GitHub App" if has_github_app else ("PAT" if has_pat else "none")
+    c.print(f"  Auth mode      : [cyan]{auth_mode}[/cyan]")
+    c.print(f"  Webhook secret : [cyan]{'configured' if has_webhook_secret else 'MISSING'}[/cyan]")
+    c.print(f"  Listening on   : [cyan]http://{args.host}:{args.port}[/cyan]")
+    c.print(f"  Webhook URL    : [cyan]http://{args.host}:{args.port}/webhook/github[/cyan]")
+    c.print()
+    c.print("  [dim]For local dev, expose this port with:[/dim]")
+    c.print("  [dim]  ngrok http {port}[/dim]".replace("{port}", str(args.port)))
+    c.print()
+
     start_scheduler(repo_root=args.repo_root)
     uvicorn.run(
         app,
@@ -324,6 +499,11 @@ def main() -> None:
     # init
     p_init = sub.add_parser("init", help="First-time setup — configure API keys")
     p_init.set_defaults(func=cmd_init)
+
+    # github-setup
+    p_github = sub.add_parser("github-setup", help="Interactive wizard to connect a GitHub App")
+    p_github.add_argument("--port", type=int, default=8000, help="Port the server will listen on")
+    p_github.set_defaults(func=cmd_github_setup)
 
     # serve
     p_serve = sub.add_parser("serve", help="Start the webhook server")

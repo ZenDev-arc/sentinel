@@ -132,6 +132,92 @@ class Sandbox:
         )
         return result
 
+    def run_js_tests(
+        self,
+        repo_archive: bytes,
+        extra_files: dict[str, str] | None = None,
+    ) -> SandboxResult:
+        """Run Jest tests for a JavaScript/TypeScript project.
+
+        Uses globally installed jest (no npm install needed — no network).
+        Works for projects that use standard jest matchers without complex
+        project-specific plugins.
+        """
+        client = self._get_client()
+        container = None
+
+        try:
+            container = client.containers.run(
+                image=settings.SANDBOX_IMAGE,
+                command="tail -f /dev/null",
+                detach=True,
+                network_mode="none",
+                mem_limit=settings.SANDBOX_MEMORY_LIMIT,
+                cpu_period=settings.SANDBOX_CPU_PERIOD,
+                cpu_quota=settings.SANDBOX_CPU_QUOTA,
+                security_opt=["no-new-privileges:true"],
+                user="1000:1000",
+                working_dir="/workspace",
+                remove=False,
+            )
+
+            container.put_archive("/workspace", self._strip_tarball_root(repo_archive))
+
+            if extra_files:
+                for rel_path, content in extra_files.items():
+                    self._inject_file(container, rel_path, content)
+
+            timeout_sec = settings.SANDBOX_TIMEOUT_SECONDS
+
+            # Use globally installed jest with ts-jest transformer.
+            # --no-coverage: faster, avoids needing babel/istanbul setup
+            # --forceExit: don't hang on open handles
+            # --testEnvironment node: works for non-browser code
+            # --transform: use ts-jest for .ts files without a local tsconfig
+            jest_cmd = (
+                "jest --no-coverage --forceExit --testEnvironment node "
+                "--transform '{\"^.+\\.tsx?$\":\"ts-jest\"}' "
+                "--testPathPattern '\\.(test|spec)\\.[jt]sx?$' 2>&1"
+            )
+            wrapped = f"timeout {timeout_sec} sh -c {shlex.quote(jest_cmd)}"
+
+            exit_code, output = container.exec_run(
+                cmd=["sh", "-c", wrapped],
+                workdir="/workspace",
+                user="1000:1000",
+                demux=True,
+            )
+
+            timed_out = (exit_code == 124)
+            if timed_out:
+                log.warning("sandbox_jest_timeout")
+
+        except Exception as exc:
+            log.error("sandbox_jest_failed", error=str(exc))
+            return SandboxResult(exit_code=-1, stdout="", stderr=str(exc))
+        finally:
+            if container is not None:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
+        stdout_bytes, stderr_bytes = (
+            output if isinstance(output, tuple) else (output, b"")
+        )
+        stdout = (stdout_bytes or b"").decode("utf-8", errors="replace")
+        stderr = (stderr_bytes or b"").decode("utf-8", errors="replace")
+
+        result = self._parse_jest_output(stdout, stderr, exit_code)
+        result.timed_out = timed_out if 'timed_out' in locals() else False
+        log.info(
+            "sandbox_jest_done",
+            exit_code=exit_code,
+            passed=result.passed,
+            failed=result.failed,
+        )
+        return result
+
     def apply_patch_and_test(
         self,
         patch: str,
@@ -218,7 +304,6 @@ class Sandbox:
         coverage = None
 
         # pytest summary line order varies: "3 failed, 3 passed" or "3 passed, 3 failed"
-        # Parse each count independently to handle all orderings.
         mp = re.search(r"(\d+) passed", stdout)
         mf = re.search(r"(\d+) failed", stdout)
         me = re.search(r"(\d+) error", stdout)
@@ -239,6 +324,33 @@ class Sandbox:
             failed=failed,
             errors=errors,
             coverage_percent=coverage,
+        )
+
+    @staticmethod
+    def _parse_jest_output(stdout: str, stderr: str, exit_code: int) -> SandboxResult:
+        import re
+
+        passed = failed = errors = 0
+
+        # Jest summary: "Tests: 3 failed, 3 passed, 6 total"
+        combined = stdout + "\n" + stderr
+        mp = re.search(r"(\d+) passed", combined)
+        mf = re.search(r"(\d+) failed", combined)
+        passed = int(mp.group(1)) if mp else 0
+        failed = int(mf.group(1)) if mf else 0
+
+        # If jest exited non-zero but no counts found, mark as error
+        if exit_code != 0 and passed == 0 and failed == 0:
+            errors = 1
+
+        return SandboxResult(
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            coverage_percent=None,
         )
 
     @staticmethod

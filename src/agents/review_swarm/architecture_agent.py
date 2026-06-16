@@ -80,9 +80,9 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
     pr = state.pr
     log.info("architecture_agent_start", repo=pr.repo_full_name, pr=pr.pr_number)
 
-    # Only run full analysis for Medium+ risk (architectural issues don't appear in typo fixes)
-    if state.risk and state.risk.level.value == "low":
-        log.info("architecture_agent_skipped", reason="low risk")
+    # Skip only for trivially small diffs — architecture issues can appear at any risk level
+    if state.pr and state.pr.additions < 10:
+        log.info("architecture_agent_skipped", reason="trivially small diff")
         return {"architecture_findings": []}
 
     kb_hits = kb.search(
