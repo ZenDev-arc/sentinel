@@ -61,7 +61,7 @@ Approval gate
 ## Install
 
 ```bash
-pip install sentinel-ai
+pip install zendev-sentinel
 ```
 
 Requires Python 3.11+ and Docker (for the sandbox).
@@ -86,6 +86,12 @@ SENTINEL uses both automatically (`cascade` mode) — Groq first, HuggingFace as
 ## Usage
 
 ```bash
+# First-time setup (saves API keys to ~/.sentinel/.env)
+sentinel init
+
+# Set up GitHub App + webhook (generates secret, walks you through the form)
+sentinel github-setup
+
 # Scan every file in a project
 sentinel scan --path ./my-project --all
 
@@ -103,6 +109,9 @@ sentinel run --repo owner/repo --pr 42
 
 # Start webhook server (auto-scans PRs on open)
 sentinel serve
+
+# Run KB maintenance agents manually (curator, drift-checker, etc.)
+sentinel maintain
 ```
 
 ---
@@ -112,8 +121,8 @@ sentinel serve
 | Language | Review | Sandbox tests | Auto-fix |
 |---|---|---|---|
 | Python | ✓ | ✓ (pytest) | ✓ |
-| TypeScript / JavaScript | ✓ | coming soon | — |
-| JSX / TSX | ✓ | coming soon | — |
+| TypeScript / JavaScript | ✓ | ✓ (jest + ts-jest) | ✓ |
+| JSX / TSX | ✓ | ✓ (jest + ts-jest) | ✓ |
 
 ---
 
