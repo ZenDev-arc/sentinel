@@ -72,9 +72,6 @@ function IconKnowledgeBase() {
       <line x1="60" y1="48" x2="100" y2="48" stroke="white" strokeWidth="1" opacity="0.35"/>
       <line x1="64" y1="54" x2="96" y2="54" stroke="white" strokeWidth="1" opacity="0.35"/>
 
-      {/* Lightning bolt — self-healing indicator */}
-      <path d="M84 115 L76 130 L82 130 L78 148 L90 130 L84 130 Z" stroke="white" strokeWidth="1.3" fill="none" opacity="0.8"/>
-
       {/* Arrow up — knowledge flowing */}
       <path d="M124 90 L132 82 L140 90" stroke="white" strokeWidth="1.2" opacity="0.4"/>
       <line x1="132" y1="82" x2="132" y2="106" stroke="white" strokeWidth="1.2" opacity="0.4"/>
