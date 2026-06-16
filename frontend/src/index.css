@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-bg-base text-text-primary font-mono;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: #222; }
+  ::-webkit-scrollbar-thumb:hover { background: #f97316; }
+
+  ::selection { background: rgba(249,115,22,0.22); color: #fff; }
+
+  /* headings use display font by default */
+  h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; }
+}
+
+@layer components {
+
+  /* ── Hero background ──────────────────────────────────────────────── */
+  .hero-bg {
+    background:
+      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(249,115,22,0.11) 0%, transparent 65%),
+      #000000;
+  }
+
+  .hero-grid {
+    background-image:
+      linear-gradient(rgba(28,28,28,0.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(28,28,28,0.5) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 100% 100% at 50% 0%, #000 40%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 100% 100% at 50% 0%, #000 40%, transparent 100%);
+  }
+
+  /* ── Cards ─────────────────────────────────────────────────────── */
+  .card {
+    @apply bg-bg-surface border border-bg-border p-5;
+  }
+
+  .card-hover {
+    @apply card cursor-pointer transition-all duration-200
+           hover:border-orange-500/40 hover:bg-bg-raised hover:shadow-orange-sm;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-6 py-3 font-display text-sm font-semibold
+           border border-orange-500 bg-orange-500/10 text-orange-400
+           hover:bg-orange-500 hover:text-black
+           transition-all duration-150;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-6 py-3 font-display text-sm font-semibold
+           border border-bg-border text-text-secondary
+           hover:border-orange-500/40 hover:text-white
+           transition-all duration-150;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 font-mono text-sm
+           text-text-muted hover:text-text-primary
+           transition-colors duration-150;
+  }
+
+  /* ── Badges ─────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5
+           text-xs font-mono border border-bg-border text-text-muted;
+  }
+
+  .badge-orange {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1
+           text-xs font-mono border border-orange-500/30
+           bg-orange-500/10 text-orange-400;
+  }
+
+  /* ── Typography ─────────────────────────────────────────────────── */
+  .section-label {
+    @apply text-xs font-mono uppercase tracking-widest text-text-muted;
+  }
+
+  /* ── Navigation ─────────────────────────────────────────────────── */
+  .nav-link {
+    @apply font-mono text-sm text-text-muted
+           hover:text-white transition-colors duration-150;
+  }
+
+  .nav-link-active {
+    @apply font-mono text-sm text-orange-400;
+  }
+
+  /* ── Code ───────────────────────────────────────────────────────── */
+  .code-block {
+    @apply font-mono text-sm bg-bg-base border border-bg-border p-4 overflow-x-auto;
+  }
+
+  .icode {
+    @apply font-mono text-orange-400 bg-orange-500/10 px-1.5 py-0.5 text-sm;
+  }
+
+  /* ── Misc ───────────────────────────────────────────────────────── */
+  .divider { @apply border-t border-bg-border; }
+  .accent-border { @apply border-l-2 border-l-orange-500; }
+}

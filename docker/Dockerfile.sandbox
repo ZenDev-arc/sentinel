@@ -1,0 +1,65 @@
+# SENTINEL sandbox image
+# Runs user test suites in a fully isolated environment.
+#
+# Security:
+#   - Non-root user (uid 1000)
+#   - No network access (enforced at container runtime via network_mode=none)
+#   - Minimal attack surface — only Python + test tooling installed
+#
+# Build with project dependencies pre-installed:
+#   docker build -f docker/Dockerfile.sandbox \
+#     --build-arg REQUIREMENTS_FILE=requirements.txt \
+#     -t sentinel-sandbox:latest .
+#
+# Default build (test tooling only — no project deps):
+#   docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .
+
+FROM python:3.12-slim
+
+# Which requirements file to pre-install into the sandbox.
+# The path is relative to the build context (repo root).
+# Override with --build-arg REQUIREMENTS_FILE=path/to/requirements.txt
+ARG REQUIREMENTS_FILE=docker/empty_requirements.txt
+
+# Create non-root user
+RUN groupadd --gid 1000 sandbox && \
+    useradd --uid 1000 --gid 1000 --no-create-home --shell /bin/bash sandbox
+
+# patch: apply unified diffs without needing a git repo
+# coreutils: provides timeout (used by the test runner wrapper)
+# curl + gnupg: required for NodeSource setup script
+RUN apt-get update -qq && \
+    apt-get install -y --no-install-recommends patch coreutils curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Python test tooling
+RUN pip install --no-cache-dir \
+    pytest==8.3.* \
+    pytest-cov==5.0.* \
+    pytest-asyncio==0.24.* \
+    coverage==7.6.* \
+    mock==5.1.*
+
+# Install global JS test tooling (available offline at runtime)
+RUN npm install -g jest ts-jest typescript @types/node --prefer-offline && \
+    npm cache clean --force
+
+# Pre-install the monitored project's dependencies.
+# Done at build time (with network) so the runtime container can run
+# with network_mode=none — pip cannot install at test time.
+COPY ${REQUIREMENTS_FILE} /tmp/project_requirements.txt
+RUN pip install --no-cache-dir -r /tmp/project_requirements.txt && \
+    rm /tmp/project_requirements.txt && \
+    rm -rf /root/.cache/pip
+
+# Working directory owned by sandbox user
+RUN mkdir -p /workspace /tmp && \
+    chown -R sandbox:sandbox /workspace /tmp
+
+WORKDIR /workspace
+USER sandbox
+
+# Default: stay alive until exec_run commands are issued
+CMD ["tail", "-f", "/dev/null"]

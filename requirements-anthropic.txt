@@ -1,0 +1,5 @@
+# Optional: install these only if you set LLM_PROVIDER=anthropic in .env
+# pip install -r requirements-anthropic.txt
+langchain-anthropic>=0.3.0
+anthropic>=0.40.0
+tiktoken>=0.8.0

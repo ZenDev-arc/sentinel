@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # ── SENTINEL API + Scheduler ───────────────────────────────────────────────
+  sentinel:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.sentinel
+    image: sentinel:latest
+    container_name: sentinel
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - sentinel_data:/app/data
+      - sentinel_logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock  # needed to spawn sandbox containers
+    env_file:
+      - ../.env
+    depends_on:
+      - chroma
+    networks:
+      - sentinel_net
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+
+  # ── Chroma vector store ────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:0.5.23
+    container_name: sentinel_chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"  # expose only on localhost in production
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=
+      - ANONYMIZED_TELEMETRY=False
+    networks:
+      - sentinel_net
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  sentinel_data:
+  sentinel_logs:
+  chroma_data:
+
+networks:
+  sentinel_net:
+    driver: bridge

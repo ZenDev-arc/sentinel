@@ -1,0 +1,2 @@
+# Fallback empty requirements file used when no project requirements are provided.
+# Pass --build-arg REQUIREMENTS_FILE=requirements.txt to install your project's deps.
