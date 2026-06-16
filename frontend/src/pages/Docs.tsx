@@ -258,7 +258,13 @@ docker compose -f docker/docker-compose.yml down`}
             </h2>
             <div className="border border-bg-border bg-bg-surface px-5 py-5 font-mono text-xs leading-relaxed text-text-secondary overflow-x-auto">
               <pre>{`src/
-├── core/           state schema · llm factory · langgraph pipeline · docker sandbox
+├── core/
+│   ├── pipeline.py     langgraph graph definition
+│   ├── sandbox.py      docker sandbox (python + jest/ts-jest)
+│   ├── llm.py          provider factory (groq → huggingface cascade)
+│   ├── project_utils.py  project-type detection (python / javascript / mixed)
+│   ├── config.py       settings from ~/.sentinel/.env + local .env
+│   └── state.py        pydantic state schema
 ├── agents/
 │   ├── risk_scorer.py
 │   ├── review_swarm/   security · performance · style · architecture · lead reviewer
