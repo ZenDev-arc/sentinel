@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useApi } from '../hooks/useApi'
-import { api, type KBStats, type Run, type Approval, type AgentInfo, type Pattern } from '../api/client'
+import { api, getBackendUrl, setBackendUrl, clearBackendUrl, type KBStats, type Run, type Approval, type AgentInfo, type Pattern } from '../api/client'
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
@@ -518,13 +518,96 @@ function PatternsSection() {
 }
 
 
+
+// ── Connect Banner ────────────────────────────────────────────────────────────
+
+function ConnectBanner({
+  onConnect,
+}: {
+  onConnect: (url: string) => void
+}) {
+  const [url, setUrl] = useState(getBackendUrl())
+  const [testing, setTesting] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function handleConnect() {
+    setTesting(true)
+    setErr(null)
+    const clean = url.replace(/\/+$/, '')
+    try {
+      const res = await fetch(clean + '/api/status', { signal: AbortSignal.timeout(5000) })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      setBackendUrl(clean)
+      onConnect(clean)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not reach server')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="mb-6 rounded-xl border border-orange-500/30 bg-orange-500/5 p-5">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white mb-1">Connect to your SENTINEL instance</p>
+          <p className="text-xs text-text-muted mb-3">
+            Run <code className="bg-bg-raised px-1.5 py-0.5 rounded text-orange-300">sentinel serve</code> locally,
+            then paste the URL below. Use <code className="bg-bg-raised px-1.5 py-0.5 rounded text-orange-300">ngrok http 8000</code> to expose it remotely.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              type="url"
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleConnect()}
+              placeholder="http://localhost:8000"
+              className="flex-1 min-w-0 bg-bg-raised border border-bg-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-text-muted focus:outline-none focus:border-orange-500/50 font-mono"
+            />
+            <button
+              onClick={handleConnect}
+              disabled={testing || !url}
+              className="px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-2 shrink-0"
+            >
+              {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+              {testing ? 'Connecting…' : 'Connect'}
+            </button>
+          </div>
+          {err && <p className="mt-2 text-xs text-red-400">{err}</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
 type Tab = 'overview' | 'runs' | 'approvals' | 'agents' | 'patterns'
 
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>('overview')
-  const { data: status } = useApi(() => api.status(), [], { interval: 30_000 })
+  const [backendUrl, setBackendUrlState] = useState<string | null>(() => {
+    // Try to detect if a URL is already saved by checking connectivity on mount
+    return localStorage.getItem('sentinel_backend_url')
+  })
+  const [connected, setConnected] = useState(false)
+  const { data: status, error: statusError } = useApi(() => api.status(), [backendUrl], { interval: 30_000 })
+
+  useEffect(() => {
+    setConnected(!!status)
+  }, [status])
+
+  function handleConnect(url: string) {
+    setBackendUrlState(url)
+    setConnected(true)
+  }
+
+  function handleDisconnect() {
+    clearBackendUrl()
+    setBackendUrlState(null)
+    setConnected(false)
+  }
 
   const tabs: { id: Tab; label: string; icon: typeof Activity }[] = [
     { id: 'overview',  label: 'KB Health',       icon: Database },
@@ -542,20 +625,34 @@ export default function Dashboard() {
           <p className="section-label mb-1">Management</p>
           <h1 className="font-display font-black text-white" style={{ fontSize: 'clamp(2rem,3.5vw,3rem)' }}>dashboard</h1>
         </div>
-        {status && (
-          <div className="flex items-center gap-2">
-            <span className={clsx(
-              'w-2 h-2 rounded-full animate-pulse-slow',
-              status.status === 'healthy' ? 'bg-white' : 'bg-amber-400'
-            )} />
-            <span className="text-xs text-text-muted">
-              {status.status === 'healthy' ? 'System healthy' : 'Degraded'} ·{' '}
-              {status.kb.entries} KB entries ·{' '}
-              LLM: {status.llm_provider}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {connected && status && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={clsx(
+                  'w-2 h-2 rounded-full animate-pulse-slow',
+                  status.status === 'healthy' ? 'bg-white' : 'bg-amber-400'
+                )} />
+                <span className="text-xs text-text-muted">
+                  {status.status === 'healthy' ? 'System healthy' : 'Degraded'} ·{' '}
+                  {status.kb.entries} KB entries ·{' '}
+                  LLM: {status.llm_provider}
+                </span>
+              </div>
+              <button
+                onClick={handleDisconnect}
+                className="text-xs text-text-muted hover:text-red-400 transition-colors"
+                title="Disconnect"
+              >
+                disconnect
+              </button>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Connect banner */}
+      {!connected && <ConnectBanner onConnect={handleConnect} />}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-bg-border">

@@ -1,7 +1,25 @@
-const BASE = '/api'
+const STORAGE_KEY = 'sentinel_backend_url'
+const DEFAULT_URL = 'http://localhost:8000'
+
+export function getBackendUrl(): string {
+  return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_URL
+}
+
+export function setBackendUrl(url: string): void {
+  const clean = url.replace(/\/+$/, '')
+  localStorage.setItem(STORAGE_KEY, clean)
+}
+
+export function clearBackendUrl(): void {
+  localStorage.removeItem(STORAGE_KEY)
+}
+
+function BASE() {
+  return getBackendUrl() + '/api'
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, {
+  const res = await fetch(BASE() + path, {
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   })
