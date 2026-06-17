@@ -23,7 +23,7 @@ function PageLayout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/sentinel">
       <PageLayout>
         <Routes>
           <Route path="/"          element={<Home />} />
