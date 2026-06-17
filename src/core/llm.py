@@ -94,6 +94,7 @@ def _groq_model(tier: str) -> BaseChatModel:
         model=model,
         api_key=settings.GROQ_API_KEY,
         temperature=0,
+        request_timeout=30,
     )
 
 
@@ -141,6 +142,7 @@ def _huggingface_model(tier: str) -> BaseChatModel:
         max_new_tokens=4096,
         temperature=0.01,  # HF endpoint doesn't support exactly 0
         do_sample=False,
+        timeout=45,
     )
     return ChatHuggingFace(llm=endpoint, verbose=False)
 

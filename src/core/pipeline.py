@@ -135,20 +135,32 @@ def node_triage(state: PipelineState) -> dict:
     return {**risk_scorer.run(state), "status": PipelineStatus.TRIAGING}
 
 
+def _run_with_timeout(fn, *args, timeout: int = 60) -> dict:
+    """Run a review agent with a hard timeout so one hung LLM call can't block the pipeline."""
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(fn, *args)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            log.warning("agent_timeout", agent=fn.__module__, timeout=timeout)
+            return {}
+
+
 def node_security(state: PipelineState) -> dict:
-    return security_agent.run(state, get_kb())
+    return _run_with_timeout(security_agent.run, state, get_kb())
 
 
 def node_performance(state: PipelineState) -> dict:
-    return performance_agent.run(state, get_kb())
+    return _run_with_timeout(performance_agent.run, state, get_kb())
 
 
 def node_style(state: PipelineState) -> dict:
-    return style_agent.run(state, get_kb())
+    return _run_with_timeout(style_agent.run, state, get_kb())
 
 
 def node_architecture(state: PipelineState) -> dict:
-    return architecture_agent.run(state, get_kb())
+    return _run_with_timeout(architecture_agent.run, state, get_kb())
 
 
 def node_lead_review(state: PipelineState) -> dict:
