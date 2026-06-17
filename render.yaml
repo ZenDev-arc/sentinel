@@ -24,6 +24,8 @@ services:
         sync: false
       - key: API_SECRET_KEY
         generateValue: true
+      - key: DISABLE_SANDBOX
+        value: "true"
       - key: CHROMA_PERSIST_DIR
         value: /tmp/chroma
       - key: LOG_FILE

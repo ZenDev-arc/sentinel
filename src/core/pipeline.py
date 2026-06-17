@@ -200,15 +200,17 @@ def node_run_tests(state: PipelineState) -> dict:
             log.warning("archive_failed", error=str(exc))
             return {"test_results": [], "errors": state.errors + [f"Sandbox archive failed: {exc}"]}
 
-    # Check Docker is available before attempting sandbox execution
+    # Skip sandbox when Docker is unavailable (e.g. Render free tier)
+    import os
+    if os.environ.get("DISABLE_SANDBOX", "").lower() in ("1", "true", "yes"):
+        log.info("sandbox_skipped", reason="DISABLE_SANDBOX=true")
+        return {"test_results": []}
+
     try:
-        import docker as _docker
-        _docker.from_env().ping()
+        sandbox = get_sandbox()
     except Exception as _docker_err:
         log.warning("sandbox_docker_unavailable", error=str(_docker_err))
         return {"test_results": [], "errors": state.errors + ["Docker unavailable — sandbox skipped"]}
-
-    sandbox = get_sandbox()
 
     if project_type == "javascript":
         log.info("sandbox_running_jest", files=len(pr.files_changed))
