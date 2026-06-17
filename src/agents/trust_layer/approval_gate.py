@@ -70,11 +70,8 @@ def _is_auto_mergeable(fix: ProposedFix, state: PipelineState) -> bool:
     if changed_lines > max_lines:
         return False
 
-    # High-risk PR with CRITICAL findings → force human review on all fixes
-    critical_count = sum(
-        1 for f in state.all_findings() if f.severity == FindingSeverity.CRITICAL
-    )
-    if state.risk and state.risk.level == RiskLevel.HIGH and critical_count > 0:
+    # High-risk PR → always require human review regardless of finding count
+    if state.risk and state.risk.level == RiskLevel.HIGH:
         return False
 
     return True
