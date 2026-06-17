@@ -67,15 +67,13 @@ export default function Navbar() {
             ))}
           </nav>
 
-          {/* Status pill */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
-              isLive ? 'bg-white animate-pulse-slow' : 'bg-orange-400'
-            }`} />
-            <span className="font-mono text-xs text-text-muted hidden sm:block">
-              {isLive ? 'live' : 'connecting'}
-            </span>
-          </div>
+          {/* Status pill — only shown when backend responds */}
+          {isLive && (
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse-slow" />
+              <span className="font-mono text-xs text-text-muted hidden sm:block">live</span>
+            </div>
+          )}
         </div>
       </div>
     </header>
