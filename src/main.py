@@ -1,25 +1,27 @@
 """
 SENTINEL entry point
 
-Usage (after pip install sentinel-ai):
-  sentinel init                              # first-time setup — saves API keys
-  sentinel scan --path ./my-project --all   # scan a local project
-  sentinel scan --path . --staged           # staged changes only
-  sentinel scan --path . --branch main      # diff vs a branch
-  sentinel run --repo owner/repo --pr 42    # run on a GitHub PR
-  sentinel serve                             # start the webhook server
-  sentinel maintain                          # run KB maintenance manually
+Usage:
+  # Start the webhook server (production mode)
+  python main.py serve
+
+  # Run the pipeline manually against a GitHub PR
+  python main.py run --repo owner/repo --pr 42
+
+  # Scan local code (no GitHub required)
+  python main.py scan --path ./src
+  python main.py scan --path . --staged          # staged changes only
+  python main.py scan --path . --branch main     # diff vs a branch
+  python main.py scan --path . --output report.md
+
+  # Run KB maintenance manually
+  python main.py maintain
 """
 
 from __future__ import annotations
 
-import os
 import argparse
 import sys
-
-# Must be set before protobuf / tensorflow are imported to avoid C++ gencode/runtime
-# version mismatch when sentence-transformers loads transformers.
-os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 # Ensure UTF-8 output on Windows (required for Rich Unicode characters)
 if sys.platform == "win32":
@@ -30,341 +32,20 @@ if sys.platform == "win32":
         pass
 
 
-def _check_groq_key(key: str) -> tuple[bool, str]:
-    """Return (ok, error_message). Makes a 1-token chat completion to verify the key."""
-    try:
-        import httpx
-        r = httpx.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return True, ""
-        if r.status_code == 401:
-            return False, "Invalid API key — check you copied the full key."
-        return False, f"Groq returned HTTP {r.status_code}: {r.text[:120]}"
-    except Exception as exc:
-        return False, f"Network error: {exc}"
-
-
-def _check_hf_token(token: str) -> tuple[bool, str]:
-    """Return (ok, error_message). Calls /api/whoami to verify the token."""
-    try:
-        import httpx
-        r = httpx.get(
-            "https://huggingface.co/api/whoami",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            name = r.json().get("name", "")
-            return True, name
-        if r.status_code == 401:
-            return False, "Invalid token — check you copied the full token."
-        return False, f"HuggingFace returned HTTP {r.status_code}: {r.text[:120]}"
-    except Exception as exc:
-        return False, f"Network error: {exc}"
-
-
-def cmd_init(args: argparse.Namespace) -> None:
-    """Interactive first-time setup — saves API keys to ~/.sentinel/.env"""
-    from pathlib import Path
-    from rich.console import Console
-    from rich.prompt import Prompt, Confirm
-    from rich.panel import Panel
-
-    c = Console()
-    c.print()
-    c.print(Panel.fit(
-        "[bold cyan]Welcome to SENTINEL[/bold cyan]\n"
-        "[dim]Self-healing AI code quality pipeline[/dim]\n\n"
-        "Let's get you set up in 2 minutes.\n"
-        "Both keys below are [bold]completely free[/bold] — no credit card needed.",
-        border_style="cyan",
-    ))
-    c.print()
-
-    # ── Groq ──────────────────────────────────────────────────────────────────
-    c.print("[bold]Step 1 of 2 — Groq API key[/bold] [dim](fast inference, free)[/dim]")
-    c.print("  → Get yours at: [cyan]https://console.groq.com[/cyan]")
-    c.print("  → Click [bold]API Keys[/bold] → [bold]Create API Key[/bold]")
-    c.print()
-
-    groq_key = ""
-    while True:
-        groq_key = Prompt.ask("  Paste your Groq key [dim](starts with gsk_)[/dim]").strip()
-        if not groq_key:
-            c.print("  [yellow]No key entered — skipping validation.[/yellow]")
-            break
-        with c.status("  Checking Groq key…", spinner="dots"):
-            ok, msg = _check_groq_key(groq_key)
-        if ok:
-            c.print("  [green]✓ Groq key is valid.[/green]")
-            break
-        c.print(f"  [red]✗ {msg}[/red]")
-        if not Confirm.ask("  Try a different key?", default=True):
-            c.print("  [yellow]Saving key as-is — you can edit ~/.sentinel/.env later.[/yellow]")
-            break
-    c.print()
-
-    # ── HuggingFace ───────────────────────────────────────────────────────────
-    c.print("[bold]Step 2 of 2 — HuggingFace token[/bold] [dim](fallback when Groq quota runs out)[/dim]")
-    c.print("  → Get yours at: [cyan]https://huggingface.co/settings/tokens[/cyan]")
-    c.print("  → Click [bold]New token[/bold] → choose [bold]Read[/bold] → Create")
-    c.print()
-
-    hf_key = ""
-    while True:
-        hf_key = Prompt.ask("  Paste your HuggingFace token [dim](starts with hf_)[/dim]").strip()
-        if not hf_key:
-            c.print("  [yellow]No token entered — skipping validation.[/yellow]")
-            break
-        with c.status("  Checking HuggingFace token…", spinner="dots"):
-            ok, msg = _check_hf_token(hf_key)
-        if ok:
-            suffix = f" (logged in as [bold]{msg}[/bold])" if msg else ""
-            c.print(f"  [green]✓ HuggingFace token is valid.{suffix}[/green]")
-            break
-        c.print(f"  [red]✗ {msg}[/red]")
-        if not Confirm.ask("  Try a different token?", default=True):
-            c.print("  [yellow]Saving token as-is — you can edit ~/.sentinel/.env later.[/yellow]")
-            break
-    c.print()
-
-    # ── Save to ~/.sentinel/.env ───────────────────────────────────────────────
-    sentinel_dir = Path.home() / ".sentinel"
-    sentinel_dir.mkdir(exist_ok=True)
-    env_file = sentinel_dir / ".env"
-
-    env_content = f"""# SENTINEL global config — generated by `sentinel init`
-# Edit this file to change settings.
-LLM_PROVIDER=cascade
-GROQ_API_KEY={groq_key}
-HUGGINGFACE_API_KEY={hf_key}
-GROQ_MODEL_STRONG=llama-3.3-70b-versatile
-GROQ_MODEL_FAST=llama-3.1-8b-instant
-HF_MODEL_STRONG=Qwen/Qwen2.5-72B-Instruct
-HF_MODEL_FAST=Qwen/Qwen2.5-7B-Instruct
-CHROMA_PERSIST_DIR={sentinel_dir / "chroma"}
-LOG_FILE={sentinel_dir / "sentinel.log"}
-SANDBOX_IMAGE=sentinel-sandbox:latest
-SANDBOX_TIMEOUT_SECONDS=120
-SANDBOX_MEMORY_LIMIT=512m
-SANDBOX_CPU_PERIOD=100000
-SANDBOX_CPU_QUOTA=50000
-"""
-    env_file.write_text(env_content, encoding="utf-8")
-
-    # ── Check Docker ──────────────────────────────────────────────────────────
-    import subprocess
-    docker_ok = subprocess.run(["docker", "info"], capture_output=True).returncode == 0
-
-    c.print(f"[green]Config saved →[/green] [cyan]{env_file}[/cyan]")
-    c.print()
-
-    if not docker_ok:
-        c.print("[yellow]Warning:[/yellow] Docker is not running.")
-        c.print("  SENTINEL needs Docker for its sandbox. Install it at: [cyan]https://docker.com[/cyan]")
-        c.print()
-
-    c.print("[bold green]SENTINEL is ready![/bold green]")
-    c.print()
-    c.print("Run your first scan:")
-    c.print("  [bold cyan]sentinel scan --path ./your-project --all[/bold cyan]")
-    c.print()
-
-
-def cmd_github_setup(args: argparse.Namespace) -> None:
-    """Interactive wizard to create a GitHub App and configure the webhook."""
-    import secrets
-    from pathlib import Path
-    from rich.console import Console
-    from rich.panel import Panel
-    from rich.prompt import Confirm, Prompt
-    from rich.rule import Rule
-
-    c = Console()
-    c.print()
-    c.print(Panel.fit(
-        "[bold cyan]SENTINEL — GitHub App Setup[/bold cyan]\n"
-        "[dim]This wizard creates a GitHub App so SENTINEL can review your PRs automatically.[/dim]\n\n"
-        "Estimated time: [bold]3 minutes[/bold]",
-        border_style="cyan",
-    ))
-    c.print()
-
-    # ── Step 1: Webhook secret ────────────────────────────────────────────────
-    c.print(Rule("[bold]Step 1 of 4[/bold] — Generate webhook secret", style="cyan"))
-    webhook_secret = secrets.token_hex(32)
-    c.print(f"\n  Generated secret: [bold yellow]{webhook_secret}[/bold yellow]")
-    c.print("  [dim]Copy this — you'll paste it into GitHub in the next step.[/dim]\n")
-
-    # ── Step 2: ngrok tunnel (local dev) ─────────────────────────────────────
-    c.print(Rule("[bold]Step 2 of 4[/bold] — Tunnel URL (local dev)", style="cyan"))
-    c.print("\n  GitHub needs a public HTTPS URL to send webhooks to.")
-    c.print("  For [bold]local development[/bold], we can start an ngrok tunnel for you.")
-    c.print("  For [bold]production[/bold], you'll use your server's public URL instead.\n")
-
-    public_url: str = ""
-    use_ngrok = Confirm.ask("  Start an ngrok tunnel now for local dev?", default=True)
-    if use_ngrok:
-        try:
-            from pyngrok import ngrok as _ngrok
-            port = args.port if hasattr(args, "port") else 8000
-            tunnel = _ngrok.connect(port, "http")
-            public_url = tunnel.public_url.replace("http://", "https://")
-            c.print(f"\n  [green]Tunnel started:[/green] [cyan]{public_url}[/cyan]")
-            c.print(f"  Webhook URL:   [bold]{public_url}/webhook/github[/bold]\n")
-        except ImportError:
-            c.print("\n  [yellow]pyngrok not installed.[/yellow] Install it with:")
-            c.print("    [bold]pip install pyngrok[/bold]\n")
-            public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
-            c.print()
-        except Exception as exc:
-            c.print(f"\n  [yellow]ngrok failed:[/yellow] {exc}")
-            public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
-            c.print()
-    else:
-        public_url = Prompt.ask("  Enter your public server URL", default="https://your-server.com").rstrip("/")
-        c.print()
-
-    webhook_url = f"{public_url}/webhook/github"
-
-    # ── Step 3: Create GitHub App ─────────────────────────────────────────────
-    c.print(Rule("[bold]Step 3 of 4[/bold] — Create GitHub App", style="cyan"))
-    c.print()
-    c.print("  Open this URL in your browser:")
-    c.print("    [bold cyan]https://github.com/settings/apps/new[/bold cyan]\n")
-    c.print("  Fill in the form as follows:\n")
-    c.print("  [bold]GitHub App name:[/bold]  SENTINEL (or any name you like)")
-    c.print("  [bold]Homepage URL:[/bold]     https://github.com/ZenDev-arc/sentinel")
-    c.print(f"  [bold]Webhook URL:[/bold]     [cyan]{webhook_url}[/cyan]")
-    c.print(f"  [bold]Webhook secret:[/bold]  [yellow]{webhook_secret}[/yellow]")
-    c.print()
-    c.print("  [bold]Permissions → Repository permissions:[/bold]")
-    c.print("    Pull requests  → [green]Read & Write[/green]")
-    c.print("    Contents       → [green]Read & Write[/green]  (for auto-committing fixes)")
-    c.print("    Metadata       → [green]Read-only[/green]   (mandatory)")
-    c.print()
-    c.print("  [bold]Subscribe to events:[/bold]")
-    c.print("    [green]✓[/green] Pull request")
-    c.print("    [green]✓[/green] Push  [dim](optional — enables revert detection)[/dim]")
-    c.print()
-    c.print("  [bold]Where can this app be installed?[/bold]")
-    c.print("    → Only on this account  [dim](recommended for personal use)[/dim]")
-    c.print("    → Any account           [dim](if you want to share it)[/dim]")
-    c.print()
-    c.print("  Click [bold]Create GitHub App[/bold].")
-    c.print()
-    Prompt.ask("  Press [bold]Enter[/bold] once you've created the app")
-    c.print()
-
-    # ── Step 4: Collect App credentials ──────────────────────────────────────
-    c.print(Rule("[bold]Step 4 of 4[/bold] — Save credentials", style="cyan"))
-    c.print()
-    c.print("  After creating the app, GitHub shows the App settings page.")
-    c.print("  Copy the [bold]App ID[/bold] from the top of the page.\n")
-    app_id = Prompt.ask("  GitHub App ID").strip()
-
-    c.print()
-    c.print("  Scroll down on the App settings page to [bold]Private keys[/bold].")
-    c.print("  Click [bold]Generate a private key[/bold] — a .pem file will download.\n")
-    default_pem = str(Path.home() / ".sentinel" / "github-app.pem")
-    pem_path = Prompt.ask(
-        f"  Path to the downloaded .pem file",
-        default=default_pem,
-    ).strip()
-    pem_path = str(Path(pem_path).expanduser().resolve())
-
-    c.print()
-    c.print("  [bold]Install the App on your repository:[/bold]")
-    c.print("    → On the App page click [bold]Install App[/bold] (left sidebar)")
-    c.print("    → Select your account / organisation → install on the repo(s) you want reviewed")
-    c.print()
-    Prompt.ask("  Press [bold]Enter[/bold] once you've installed the app")
-
-    # ── Save to ~/.sentinel/.env ───────────────────────────────────────────────
-    sentinel_dir = Path.home() / ".sentinel"
-    sentinel_dir.mkdir(exist_ok=True)
-    env_file = sentinel_dir / ".env"
-
-    # Read existing content and update/append GitHub keys
-    existing = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
-
-    def _set_key(content: str, key: str, value: str) -> str:
-        import re
-        if re.search(rf"^{key}\s*=", content, re.MULTILINE):
-            return re.sub(rf"^{key}\s*=.*$", f"{key}={value}", content, flags=re.MULTILINE)
-        return content + f"\n{key}={value}"
-
-    existing = _set_key(existing, "GITHUB_APP_ID", app_id)
-    existing = _set_key(existing, "GITHUB_WEBHOOK_SECRET", webhook_secret)
-    existing = _set_key(existing, "GITHUB_APP_PRIVATE_KEY_PATH", pem_path)
-
-    env_file.write_text(existing, encoding="utf-8")
-
-    c.print()
-    c.print(f"[green]GitHub credentials saved →[/green] [cyan]{env_file}[/cyan]")
-    c.print()
-    c.print("[bold green]Done![/bold green]  Start the webhook server with:")
-    c.print("  [bold cyan]sentinel serve[/bold cyan]")
-    if use_ngrok:
-        c.print()
-        c.print(f"  [dim]ngrok tunnel:[/dim] [cyan]{public_url}[/cyan]")
-        c.print("  [dim]Keep this terminal open — the tunnel closes when you exit.[/dim]")
-    c.print()
-
-
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    from rich.console import Console
     from src.api.webhook import app
-    from src.core.config import settings
-    from src.core.logging import configure_logging, get_logger
+    from src.core.logging import configure_logging
     from src.scheduler.maintenance import start_scheduler
 
     configure_logging()
-    log = get_logger(__name__)
-    c = Console()
-
-    # ── Validate GitHub is configured ─────────────────────────────────────────
-    has_github_app = bool(settings.GITHUB_APP_ID and settings.github_app_private_key)
-    has_pat = bool(settings.GITHUB_TOKEN)
-    has_webhook_secret = bool(settings.GITHUB_WEBHOOK_SECRET)
-
-    c.print()
-    c.print("[bold cyan]SENTINEL[/bold cyan]  webhook server")
-    c.print()
-
-    if not has_webhook_secret:
-        c.print("[yellow]Warning:[/yellow] GITHUB_WEBHOOK_SECRET is not set.")
-        c.print("  All incoming webhooks will be rejected.")
-        c.print("  Run [bold]sentinel github-setup[/bold] to configure.\n")
-
-    if not has_github_app and not has_pat:
-        c.print("[yellow]Warning:[/yellow] No GitHub authentication configured.")
-        c.print("  SENTINEL can receive webhooks but cannot post comments or commit fixes.")
-        c.print("  Set GITHUB_TOKEN (simple) or run [bold]sentinel github-setup[/bold] (full App).\n")
-
-    auth_mode = "GitHub App" if has_github_app else ("PAT" if has_pat else "none")
-    c.print(f"  Auth mode      : [cyan]{auth_mode}[/cyan]")
-    c.print(f"  Webhook secret : [cyan]{'configured' if has_webhook_secret else 'MISSING'}[/cyan]")
-    c.print(f"  Listening on   : [cyan]http://{args.host}:{args.port}[/cyan]")
-    c.print(f"  Webhook URL    : [cyan]http://{args.host}:{args.port}/webhook/github[/cyan]")
-    c.print()
-    c.print("  [dim]For local dev, expose this port with:[/dim]")
-    c.print("  [dim]  ngrok http {port}[/dim]".replace("{port}", str(args.port)))
-    c.print()
-
     start_scheduler(repo_root=args.repo_root)
     uvicorn.run(
         app,
         host=args.host,
         port=args.port,
-        log_config=None,
+        log_config=None,  # use structlog
     )
 
 
@@ -414,6 +95,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
     _SOURCE_EXTS = (".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs")
 
     def _collect_source_files(root: "Path") -> "tuple[list[str], str, int]":
+        """Collect every source file, build a synthetic diff, return (files, diff, additions)."""
         src_files: list[str] = []
         full_diff = ""
         added = 0
@@ -434,6 +116,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
                 pass
         return src_files, full_diff, added
 
+    # ── Build diff ────────────────────────────────────────────────────────────
     diff = ""
     files_changed: list[str] = []
     additions = deletions = 0
@@ -452,10 +135,12 @@ def cmd_scan(args: argparse.Namespace) -> None:
     else:
         result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
         diff = result.stdout
+        # If working tree is clean, fall back to last commit's changes
         if not diff.strip():
             result = subprocess.run(["git", "diff", "HEAD~1", "HEAD"], capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
             diff = result.stdout
 
+    # ── Parse files + line counts from diff (when not using --all) ────────────
     if not args.all:
         for line in diff.splitlines():
             if line.startswith("+++ b/"):
@@ -467,6 +152,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
             elif line.startswith("-") and not line.startswith("---"):
                 deletions += 1
 
+        # No git diff at all — fall back to full scan
         if not files_changed:
             print("No git diff found — falling back to full source file scan.")
             files_changed, diff, additions = _collect_source_files(scan_path)
@@ -475,6 +161,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
         print("Nothing to scan — no source files found and no git diff.")
         sys.exit(0)
 
+    # ── Detect repo name from git remote ──────────────────────────────────────
     remote = subprocess.run(
         ["git", "remote", "get-url", "origin"],
         capture_output=True, text=True, cwd=str(scan_path),
@@ -485,6 +172,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
         if m:
             repo_name = m.group(1)
 
+    # ── Package the directory for the Docker sandbox ──────────────────────────
     print(f"Packaging {scan_path.name} for sandbox…")
     buf = BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -499,6 +187,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
                     pass
     repo_archive = buf.getvalue()
 
+    # ── Build synthetic PR metadata ───────────────────────────────────────────
     pr_meta = PRMetadata(
         repo_full_name=repo_name,
         pr_number=0,
@@ -549,6 +238,111 @@ def _run_and_display(pipeline, initial_state, report_title: str) -> None:
     print_report(final_state, title=report_title)
 
 
+def cmd_init(args: argparse.Namespace) -> None:
+    """Interactive first-time setup — writes API keys to ~/.sentinel/.env."""
+    from pathlib import Path
+    from rich.console import Console
+    from rich.prompt import Prompt, Confirm
+
+    c = Console()
+    c.print("\n[bold orange1]SENTINEL[/bold orange1]  setup wizard\n")
+
+    env_dir = Path.home() / ".sentinel"
+    env_file = env_dir / ".env"
+    env_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load existing values so re-running doesn't clear them
+    existing: dict[str, str] = {}
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, _, v = line.partition("=")
+                existing[k.strip()] = v.strip()
+
+    def ask(key: str, prompt: str, default: str = "", secret: bool = False) -> str:
+        cur = existing.get(key, default)
+        hint = f"[dim](current: {cur[:8]}…)[/dim]" if (cur and secret) else f"[dim](current: {cur})[/dim]" if cur else ""
+        val = Prompt.ask(f"  {prompt} {hint}", password=secret, default=cur)
+        return val or cur
+
+    c.print("[bold]LLM provider[/bold]  (cascade = Groq → HuggingFace fallback, recommended)")
+    provider = Prompt.ask(
+        "  LLM_PROVIDER",
+        choices=["cascade", "groq", "huggingface", "ollama", "anthropic"],
+        default=existing.get("LLM_PROVIDER", "cascade"),
+    )
+
+    groq_key = hf_key = ollama_url = anthropic_key = ""
+    if provider in ("cascade", "groq"):
+        c.print("\n[bold]Groq[/bold]  free key at [cyan]console.groq.com[/cyan]")
+        groq_key = ask("GROQ_API_KEY", "GROQ_API_KEY", secret=True)
+    if provider in ("cascade", "huggingface"):
+        c.print("\n[bold]HuggingFace[/bold]  free token at [cyan]huggingface.co/settings/tokens[/cyan]")
+        hf_key = ask("HUGGINGFACE_API_KEY", "HUGGINGFACE_API_KEY", secret=True)
+    if provider == "ollama":
+        ollama_url = ask("OLLAMA_BASE_URL", "OLLAMA_BASE_URL", default="http://localhost:11434")
+    if provider == "anthropic":
+        anthropic_key = ask("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY", secret=True)
+
+    c.print("\n[bold]GitHub[/bold]")
+    webhook_secret = ask("GITHUB_WEBHOOK_SECRET", "GITHUB_WEBHOOK_SECRET", secret=True)
+    github_token   = ask("GITHUB_TOKEN",           "GITHUB_TOKEN (PAT with repo scope)", secret=True)
+    github_app_id  = ask("GITHUB_APP_ID",          "GITHUB_APP_ID (leave blank to use PAT)", default="")
+
+    lines = [
+        "# SENTINEL configuration — generated by sentinel init",
+        f"LLM_PROVIDER={provider}",
+    ]
+    if groq_key:      lines.append(f"GROQ_API_KEY={groq_key}")
+    if hf_key:        lines.append(f"HUGGINGFACE_API_KEY={hf_key}")
+    if ollama_url:    lines.append(f"OLLAMA_BASE_URL={ollama_url}")
+    if anthropic_key: lines.append(f"ANTHROPIC_API_KEY={anthropic_key}")
+    if webhook_secret: lines.append(f"GITHUB_WEBHOOK_SECRET={webhook_secret}")
+    if github_token:   lines.append(f"GITHUB_TOKEN={github_token}")
+    if github_app_id:  lines.append(f"GITHUB_APP_ID={github_app_id}")
+
+    # Preserve any other keys from the existing file
+    skip = {"LLM_PROVIDER","GROQ_API_KEY","HUGGINGFACE_API_KEY","OLLAMA_BASE_URL",
+            "ANTHROPIC_API_KEY","GITHUB_WEBHOOK_SECRET","GITHUB_TOKEN","GITHUB_APP_ID"}
+    for k, v in existing.items():
+        if k not in skip:
+            lines.append(f"{k}={v}")
+
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    c.print(f"\n[green]✓[/green]  Saved to [cyan]{env_file}[/cyan]")
+    c.print("\nNext steps:")
+    c.print("  1. Build the sandbox image:  [cyan]docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .[/cyan]")
+    c.print("  2. Set up your GitHub webhook:  [cyan]sentinel github-setup[/cyan]")
+    c.print("  3. Start the server:  [cyan]sentinel serve[/cyan]\n")
+
+
+def cmd_github_setup(args: argparse.Namespace) -> None:
+    """Print step-by-step GitHub webhook setup instructions."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    c = Console()
+    c.print("\n[bold orange1]SENTINEL[/bold orange1]  GitHub webhook setup\n")
+    c.print(Panel(
+        "[bold]1.[/bold] Go to your GitHub repo → [cyan]Settings → Webhooks → Add webhook[/cyan]\n\n"
+        "[bold]2.[/bold] Fill in:\n"
+        "   Payload URL:   [cyan]http://<your-machine-ip>:8000/webhook/github[/cyan]\n"
+        "                  [dim](use ngrok for internet access — see below)[/dim]\n"
+        "   Content type:  [cyan]application/json[/cyan]\n"
+        "   Secret:        [cyan]the GITHUB_WEBHOOK_SECRET from your .env[/cyan]\n"
+        "   Events:        [cyan]Pull requests[/cyan]\n\n"
+        "[bold]3.[/bold] For local dev with a public URL, start an ngrok tunnel:\n"
+        "   [cyan]ngrok http 8000[/cyan]\n"
+        "   Then use the [cyan]https://xxxx.ngrok-free.app[/cyan] URL as your Payload URL.\n\n"
+        "[bold]4.[/bold] Start SENTINEL:\n"
+        "   [cyan]sentinel serve[/cyan]\n\n"
+        "[bold]5.[/bold] Open a PR on your repo — SENTINEL will post a review comment automatically.",
+        title="Setup steps",
+        border_style="orange1",
+    ))
+    c.print()
+
+
 def cmd_maintain(args: argparse.Namespace) -> None:
     from src.agents.self_healing import consolidation, consistency, curator, drift_checker
     from src.core.logging import configure_logging
@@ -564,25 +358,13 @@ def cmd_maintain(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="sentinel",
-        description="SENTINEL — self-healing AI code quality pipeline",
-    )
+    parser = argparse.ArgumentParser(description="SENTINEL — self-healing code quality pipeline")
     sub = parser.add_subparsers(dest="command")
-
-    # init
-    p_init = sub.add_parser("init", help="First-time setup — configure API keys")
-    p_init.set_defaults(func=cmd_init)
-
-    # github-setup
-    p_github = sub.add_parser("github-setup", help="Interactive wizard to connect a GitHub App")
-    p_github.add_argument("--port", type=int, default=8000, help="Port the server will listen on")
-    p_github.set_defaults(func=cmd_github_setup)
 
     # serve
     p_serve = sub.add_parser("serve", help="Start the webhook server")
     p_serve.add_argument("--host", default="0.0.0.0")
-    p_serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", os.environ.get("API_PORT", 8000))))
+    p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--repo-root", default=".", help="Local path to the monitored repo")
     p_serve.set_defaults(func=cmd_serve)
 
@@ -590,18 +372,24 @@ def main() -> None:
     p_run = sub.add_parser("run", help="Run pipeline manually on a GitHub PR")
     p_run.add_argument("--repo", required=True, help="owner/repo")
     p_run.add_argument("--pr", type=int, required=True, help="PR number")
-    p_run.add_argument("--force-review", action="store_true", dest="force_review")
+    p_run.add_argument("--force-review", action="store_true", dest="force_review", help="Always run full review swarm regardless of risk level")
     p_run.set_defaults(func=cmd_run)
 
     # scan
     p_scan = sub.add_parser("scan", help="Scan local code — no GitHub PR required")
     p_scan.add_argument("--path", default=".", help="Directory to scan (default: current dir)")
-    p_scan.add_argument("--all", action="store_true", help="Scan every source file (ignores git diff)")
+    p_scan.add_argument("--all", action="store_true", help="Scan every source file in the path (.py/.js/.ts/.jsx/.tsx) — ignores git diff")
     p_scan.add_argument("--staged", action="store_true", help="Scan only staged git changes")
     p_scan.add_argument("--branch", default=None, help="Diff against this branch (e.g. main)")
-    p_scan.add_argument("--force-review", action="store_true", dest="force_review")
-    p_scan.add_argument("--output", default=None, help="Save report to file (e.g. report.md)")
+    p_scan.add_argument("--force-review", action="store_true", dest="force_review", help="Always run full review swarm regardless of risk level")
+    p_scan.add_argument("--output", default=None, help="Save report to this file (e.g. report.md)")
     p_scan.set_defaults(func=cmd_scan)
+
+    # init
+    sub.add_parser("init", help="First-time setup wizard — saves API keys to ~/.sentinel/.env").set_defaults(func=cmd_init)
+
+    # github-setup
+    sub.add_parser("github-setup", help="Step-by-step GitHub webhook setup guide").set_defaults(func=cmd_github_setup)
 
     # maintain
     p_maintain = sub.add_parser("maintain", help="Run KB maintenance agents manually")
