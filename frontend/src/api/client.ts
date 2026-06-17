@@ -20,7 +20,11 @@ function BASE() {
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE() + path, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true',
+      ...init?.headers,
+    },
     ...init,
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)

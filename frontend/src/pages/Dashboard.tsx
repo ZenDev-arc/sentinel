@@ -535,7 +535,10 @@ function ConnectBanner({
     setErr(null)
     const clean = url.replace(/\/+$/, '')
     try {
-      const res = await fetch(clean + '/api/status', { signal: AbortSignal.timeout(5000) })
+      const res = await fetch(clean + '/api/status', {
+        signal: AbortSignal.timeout(5000),
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+      })
       if (!res.ok) throw new Error(`Server returned ${res.status}`)
       setBackendUrl(clean)
       onConnect(clean)
