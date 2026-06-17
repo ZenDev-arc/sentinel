@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     )
 
     # ── LLM ──────────────────────────────────────────────────────────────────
-    LLM_PROVIDER: str = "ollama"
+    LLM_PROVIDER: str = "cascade"
 
     # Ollama (local, free — no API key)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     # ── Docker sandbox ────────────────────────────────────────────────────────
     SANDBOX_IMAGE: str = "sentinel-sandbox:latest"
     SANDBOX_TIMEOUT_SECONDS: int = 120
-    SANDBOX_MEMORY_LIMIT: str = "512m"
+    SANDBOX_MEMORY_LIMIT: str = "1g"
     SANDBOX_CPU_PERIOD: int = 100000
     SANDBOX_CPU_QUOTA: int = 50000
 

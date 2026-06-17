@@ -124,7 +124,7 @@ _EVENT_CONFIG: dict[str, tuple[str | None, str, str, str]] = {
     "kb_upserted":                 ("KNOWLEDGE BASE","✓", "green",         "KB updated  [{type}]  {title}"),
     "kb_embed_failed":             (None,            "⚠", "yellow",        "Embedding failed — entry skipped"),
     "loading_embedding_model":     (None,            "·", "dim",           "Loading embedding model  ({model})..."),
-    "hf_api_unreachable_falling_back_to_local": (None,"·","dim",           "HF API unreachable — using local embeddings"),
+    "embedding_failed_returning_zeros": (None,       "⚠", "yellow",        "Embedding model failed — zero vectors used"),
 
     # ── Self-healing maintenance ───────────────────────────────────────────────
     "curator_agent_start":         ("MAINTENANCE",   "·", "dim",           "Curator running..."),
