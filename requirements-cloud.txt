@@ -1,14 +1,12 @@
-# Cloud / Render requirements — excludes sentence-transformers + torch (~1 GB).
-# Embeddings are served via the HuggingFace Inference API instead.
+# Cloud / Render requirements — excludes sentence-transformers, torch, docker (~1 GB+).
+# Embeddings: HuggingFace Inference API (httpx). LLM: Groq only (no HF fallback on cloud).
 # Generated from requirements.txt — keep in sync manually.
 
 # ── Core orchestration ──────────────────────────────────────────────────────
 langgraph>=0.2.0
 langchain>=0.3.0
-langchain-ollama>=0.2.0
 langchain-groq>=0.2.0
 langchain-community>=0.3.0
-langchain-huggingface>=0.1.0
 huggingface_hub>=0.24.0
 
 # ── Knowledge base / vector store ────────────────────────────────────────────
@@ -28,9 +26,6 @@ gitpython>=3.1.43
 
 # ── Scheduling ────────────────────────────────────────────────────────────────
 apscheduler>=3.10.4
-
-# ── Docker sandbox ────────────────────────────────────────────────────────────
-docker>=7.1.0
 
 # ── Data / validation ─────────────────────────────────────────────────────────
 pydantic>=2.9.0
