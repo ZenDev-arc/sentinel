@@ -89,7 +89,17 @@ def run(state: PipelineState) -> dict:
     # Sort by severity before sending to LLM to help it prioritise
     all_findings.sort(key=lambda f: _SEVERITY_RANK.get(f.severity, 0), reverse=True)
 
-    raw_json = json.dumps([f.model_dump() for f in all_findings], default=str)
+    # Trim each finding to keep the payload under Groq's token limit
+    def _trim(f: ReviewFinding) -> dict:
+        d = f.model_dump()
+        d["description"] = (d.get("description") or "")[:300]
+        d["suggestion"] = (d.get("suggestion") or "")[:200]
+        return d
+
+    raw_json = json.dumps([_trim(f) for f in all_findings], default=str)
+    # Hard cap at 12 000 chars (~3 000 tokens) so we never hit a 413
+    if len(raw_json) > 12_000:
+        raw_json = raw_json[:12_000] + "]"
 
     try:
         consolidated_raw = _consolidate(raw_json)
