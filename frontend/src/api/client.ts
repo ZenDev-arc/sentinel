@@ -25,6 +25,7 @@ export const api = {
                  req('/maintenance/trigger', { method: 'POST', body: JSON.stringify({ agent, repo_root }) }),
   triggerPipeline: (repo: string, pr_number: number) =>
                  req('/pipeline/trigger', { method: 'POST', body: JSON.stringify({ repo, pr_number }) }),
+  patterns:    () => req<{ patterns: Pattern[]; total: number }>('/patterns'),
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -46,13 +47,26 @@ export interface Run {
   completed_at?: string
   status: string
   findings?: number
+  regressions?: number
+  finding_categories?: Record<string, number>
   tests_generated?: number
   bugs_found?: number
   auto_fixes?: number
   pending_fixes?: number
   risk_level?: string
   risk_score?: number
+  token_total?: number
+  est_cost_usd?: number
   error?: string
+}
+
+export interface Pattern {
+  type: string
+  title: string
+  description: string
+  severity: 'high' | 'medium' | 'low'
+  evidence: Record<string, unknown>
+  detected_at: string
 }
 
 export interface KBStats {

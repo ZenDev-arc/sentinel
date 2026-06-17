@@ -15,9 +15,6 @@ export default function Footer() {
 
           {/* Brand */}
           <div className="flex items-center gap-2.5">
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" className="shrink-0">
-              <path d="M11 2L4 11h6l-1 7 7-9h-6l1-7z" fill="#f97316" stroke="#f97316" strokeWidth="0.5" strokeLinejoin="round" />
-            </svg>
             <span className="font-display font-bold text-sm text-white">sentinel</span>
             <span className="font-mono text-xs text-text-muted ml-1">self-healing code review pipeline</span>
           </div>

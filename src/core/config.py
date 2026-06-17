@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # ── GitHub ────────────────────────────────────────────────────────────────
     GITHUB_APP_ID: Optional[str] = None
     GITHUB_APP_PRIVATE_KEY_PATH: str = "./keys/github-app.pem"
+    # Set this directly to the PEM content (preferred on cloud hosts like Render/Railway
+    # where you can't mount a file). Takes precedence over GITHUB_APP_PRIVATE_KEY_PATH.
+    GITHUB_APP_PRIVATE_KEY: Optional[str] = None
     GITHUB_WEBHOOK_SECRET: str = ""
     GITHUB_TOKEN: Optional[str] = None
 
@@ -114,6 +117,9 @@ class Settings(BaseSettings):
 
     @property
     def github_app_private_key(self) -> Optional[str]:
+        # Env var takes precedence (cloud deployments where file mounts aren't available)
+        if self.GITHUB_APP_PRIVATE_KEY:
+            return self.GITHUB_APP_PRIVATE_KEY.replace("\\n", "\n")
         path = Path(self.GITHUB_APP_PRIVATE_KEY_PATH)
         if path.exists():
             return path.read_text()

@@ -111,6 +111,26 @@ def get_sandbox() -> Sandbox:
 # ── Node wrappers ─────────────────────────────────────────────────────────────
 # Each node receives the full PipelineState and returns a partial dict.
 
+def node_load_policy(state: PipelineState) -> dict:
+    """Fetch sentinel.yaml from the PR's repo and store it in state before any agent runs."""
+    from src.core.policy import load_policy, SentinelPolicy
+    from src.core.token_tracker import RunTokenTracker, set_tracker
+
+    # Activate a fresh token tracker for this run
+    set_tracker(RunTokenTracker())
+
+    if state.pr is None:
+        return {"policy": SentinelPolicy()}
+
+    try:
+        policy = load_policy(state.pr.repo_full_name, state.pr.head_sha)
+    except Exception as exc:
+        log.warning("policy_load_error", error=str(exc))
+        policy = SentinelPolicy()
+
+    return {"policy": policy}
+
+
 def node_triage(state: PipelineState) -> dict:
     return {**risk_scorer.run(state), "status": PipelineStatus.TRIAGING}
 
@@ -249,11 +269,17 @@ def node_explain(state: PipelineState) -> dict:
 
 
 def node_approval_gate(state: PipelineState) -> dict:
-    return {**approval_gate.run(state), "status": PipelineStatus.GATING}
+    return {**approval_gate.run(state, get_kb()), "status": PipelineStatus.GATING}
 
 
 def node_finalise(state: PipelineState) -> dict:
-    return {**orchestrator.run(state, get_kb()), "status": PipelineStatus.DONE}
+    from src.core.token_tracker import get_tracker
+    tracker = get_tracker()
+    result = {**orchestrator.run(state, get_kb()), "status": PipelineStatus.DONE}
+    if tracker:
+        result["token_total"] = tracker.total_tokens
+        result["est_cost_usd"] = tracker.est_cost_usd
+    return result
 
 
 # ── Conditional routing ───────────────────────────────────────────────────────
@@ -297,6 +323,7 @@ def build_graph() -> StateGraph:
     graph = StateGraph(PipelineState)
 
     # Register all nodes
+    graph.add_node("load_policy", node_load_policy)
     graph.add_node("triage", node_triage)
     graph.add_node("start_review", node_start_review)
     graph.add_node("review_security", node_security)
@@ -316,8 +343,9 @@ def build_graph() -> StateGraph:
     graph.add_node("approval_gate", node_approval_gate)
     graph.add_node("finalise", node_finalise)
 
-    # Entry
-    graph.add_edge(START, "triage")
+    # Entry: load per-repo policy first, then triage
+    graph.add_edge(START, "load_policy")
+    graph.add_edge("load_policy", "triage")
 
     # LOW risk → skip review swarm, go straight to test generation.
     # MEDIUM/HIGH → fan-out to all four specialist reviewers in parallel.

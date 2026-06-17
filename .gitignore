@@ -2,7 +2,8 @@
 .env
 *.pem
 *.key
-keys/
+keys/*.pem
+keys/*.key
 
 # Python
 __pycache__/

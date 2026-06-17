@@ -13,8 +13,13 @@ Usage (after pip install sentinel-ai):
 
 from __future__ import annotations
 
+import os
 import argparse
 import sys
+
+# Must be set before protobuf / tensorflow are imported to avoid C++ gencode/runtime
+# version mismatch when sentence-transformers loads transformers.
+os.environ.setdefault("PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION", "python")
 
 # Ensure UTF-8 output on Windows (required for Rich Unicode characters)
 if sys.platform == "win32":
@@ -25,11 +30,49 @@ if sys.platform == "win32":
         pass
 
 
+def _check_groq_key(key: str) -> tuple[bool, str]:
+    """Return (ok, error_message). Makes a 1-token chat completion to verify the key."""
+    try:
+        import httpx
+        r = httpx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return True, ""
+        if r.status_code == 401:
+            return False, "Invalid API key — check you copied the full key."
+        return False, f"Groq returned HTTP {r.status_code}: {r.text[:120]}"
+    except Exception as exc:
+        return False, f"Network error: {exc}"
+
+
+def _check_hf_token(token: str) -> tuple[bool, str]:
+    """Return (ok, error_message). Calls /api/whoami to verify the token."""
+    try:
+        import httpx
+        r = httpx.get(
+            "https://huggingface.co/api/whoami",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            name = r.json().get("name", "")
+            return True, name
+        if r.status_code == 401:
+            return False, "Invalid token — check you copied the full token."
+        return False, f"HuggingFace returned HTTP {r.status_code}: {r.text[:120]}"
+    except Exception as exc:
+        return False, f"Network error: {exc}"
+
+
 def cmd_init(args: argparse.Namespace) -> None:
     """Interactive first-time setup — saves API keys to ~/.sentinel/.env"""
     from pathlib import Path
     from rich.console import Console
-    from rich.prompt import Prompt
+    from rich.prompt import Prompt, Confirm
     from rich.panel import Panel
 
     c = Console()
@@ -48,7 +91,22 @@ def cmd_init(args: argparse.Namespace) -> None:
     c.print("  → Get yours at: [cyan]https://console.groq.com[/cyan]")
     c.print("  → Click [bold]API Keys[/bold] → [bold]Create API Key[/bold]")
     c.print()
-    groq_key = Prompt.ask("  Paste your Groq key [dim](starts with gsk_)[/dim]").strip()
+
+    groq_key = ""
+    while True:
+        groq_key = Prompt.ask("  Paste your Groq key [dim](starts with gsk_)[/dim]").strip()
+        if not groq_key:
+            c.print("  [yellow]No key entered — skipping validation.[/yellow]")
+            break
+        with c.status("  Checking Groq key…", spinner="dots"):
+            ok, msg = _check_groq_key(groq_key)
+        if ok:
+            c.print("  [green]✓ Groq key is valid.[/green]")
+            break
+        c.print(f"  [red]✗ {msg}[/red]")
+        if not Confirm.ask("  Try a different key?", default=True):
+            c.print("  [yellow]Saving key as-is — you can edit ~/.sentinel/.env later.[/yellow]")
+            break
     c.print()
 
     # ── HuggingFace ───────────────────────────────────────────────────────────
@@ -56,7 +114,23 @@ def cmd_init(args: argparse.Namespace) -> None:
     c.print("  → Get yours at: [cyan]https://huggingface.co/settings/tokens[/cyan]")
     c.print("  → Click [bold]New token[/bold] → choose [bold]Read[/bold] → Create")
     c.print()
-    hf_key = Prompt.ask("  Paste your HuggingFace token [dim](starts with hf_)[/dim]").strip()
+
+    hf_key = ""
+    while True:
+        hf_key = Prompt.ask("  Paste your HuggingFace token [dim](starts with hf_)[/dim]").strip()
+        if not hf_key:
+            c.print("  [yellow]No token entered — skipping validation.[/yellow]")
+            break
+        with c.status("  Checking HuggingFace token…", spinner="dots"):
+            ok, msg = _check_hf_token(hf_key)
+        if ok:
+            suffix = f" (logged in as [bold]{msg}[/bold])" if msg else ""
+            c.print(f"  [green]✓ HuggingFace token is valid.{suffix}[/green]")
+            break
+        c.print(f"  [red]✗ {msg}[/red]")
+        if not Confirm.ask("  Try a different token?", default=True):
+            c.print("  [yellow]Saving token as-is — you can edit ~/.sentinel/.env later.[/yellow]")
+            break
     c.print()
 
     # ── Save to ~/.sentinel/.env ───────────────────────────────────────────────

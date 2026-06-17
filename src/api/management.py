@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from src.api.store import (
     get_approval,
     get_last_maintenance,
+    get_patterns,
     get_run,
     list_approvals,
     list_maintenance,
@@ -68,7 +69,7 @@ async def get_status() -> dict:
 
     return {
         "status": "healthy" if kb_ok else "degraded",
-        "version": "1.0.0",
+        "version": "0.1.3",
         "kb": {"ok": kb_ok, "entries": kb_count},
         "last_run": {
             "status": last_run_status,
@@ -233,6 +234,12 @@ async def _commit_approved_fix(approval: dict, reviewer: str) -> None:
         )
 
 
+@router.get("/patterns")
+async def get_cross_pr_patterns() -> dict:
+    patterns = get_patterns()
+    return {"patterns": patterns, "total": len(patterns)}
+
+
 @router.post("/approvals/{approval_id}/reject")
 async def reject_fix(approval_id: str, body: ApprovalAction) -> dict:
     ok = update_approval(approval_id, "rejected", reviewer=body.reviewer)
@@ -286,6 +293,15 @@ async def get_agent_status() -> dict:
             "last_run": last.get("consolidation", {}).get("ran_at"),
             "last_result": last.get("consolidation", {}),
         },
+        {
+            "name": "Pattern Detector",
+            "id": "pattern_detector",
+            "role": "Surfaces recurring cross-PR issues for team-level attention",
+            "schedule": "Weekly Sunday 04:00 UTC",
+            "swarm": "self_healing",
+            "last_run": last.get("pattern_detector", {}).get("ran_at"),
+            "last_result": last.get("pattern_detector", {}),
+        },
     ]
     return {
         "agents": agents,
@@ -309,7 +325,7 @@ async def trigger_maintenance(
 
 
 async def _run_maintenance(agent: str, repo_root: str) -> None:
-    from src.agents.self_healing import consolidation, consistency, curator, drift_checker
+    from src.agents.self_healing import consolidation, consistency, curator, drift_checker, pattern_detector
     from datetime import datetime
 
     kb = _get_kb()
@@ -345,6 +361,13 @@ async def _run_maintenance(agent: str, repo_root: str) -> None:
             _record("consolidation", result)
         except Exception as exc:
             _record("consolidation", {"error": str(exc)})
+
+    if agent in ("all", "pattern_detector"):
+        try:
+            result = pattern_detector.run(kb)
+            _record("pattern_detector", result)
+        except Exception as exc:
+            _record("pattern_detector", {"error": str(exc)})
 
     log.info("manual_maintenance_done", agent=agent)
 
@@ -385,19 +408,34 @@ async def _run_pipeline(repo: str, pr_number: int) -> None:
 
         pipeline = compile_pipeline()
         state = PipelineState(pr=pr_meta)
-        final: PipelineState = await asyncio.to_thread(pipeline.invoke, state)
+        final_raw = await asyncio.to_thread(pipeline.invoke, state)
+        final: PipelineState = PipelineState.model_validate(final_raw) if isinstance(final_raw, dict) else final_raw
+
+        # Token usage is stored in state by node_finalise (runs in pipeline thread)
+        token_total = final.token_total
+        est_cost_usd = final.est_cost_usd
+
+        # Per-category finding counts for pattern detection
+        finding_categories: dict[str, int] = {}
+        for f in final.consolidated_findings:
+            cat = f.category.value
+            finding_categories[cat] = finding_categories.get(cat, 0) + 1
 
         run_record.update({
             "run_id": final.run_id,
             "status": final.status.value,
             "completed_at": datetime.utcnow().isoformat(),
             "findings": len(final.consolidated_findings),
+            "regressions": sum(1 for f in final.consolidated_findings if f.is_regression),
+            "finding_categories": finding_categories,
             "tests_generated": len(final.generated_tests),
             "bugs_found": len(final.bug_reports),
             "auto_fixes": len(final.auto_applied_fixes),
             "pending_fixes": len(final.pending_human_fixes),
             "risk_level": final.risk.level.value if final.risk else None,
             "risk_score": final.risk.score if final.risk else None,
+            "token_total": token_total,
+            "est_cost_usd": est_cost_usd,
         })
 
         # Save pending approvals
@@ -414,6 +452,27 @@ async def _run_pipeline(repo: str, pr_number: int) -> None:
                 "classification": fix.classification.value,
                 "run_id": final.run_id,
             })
+
+        # Launch CI watcher for each auto-applied fix (fire-and-forget)
+        if final.auto_applied_fixes and final.pr:
+            from src.agents.trust_layer import rollback_agent
+            pr_branch = final.pr.head_branch
+            installation_id = final.pr.installation_id
+            for fix in final.auto_applied_fixes:
+                if fix.commit_sha:
+                    asyncio.ensure_future(
+                        rollback_agent.watch_and_rollback(
+                            repo=repo,
+                            pr_number=pr_number,
+                            fix_id=fix.id,
+                            commit_sha=fix.commit_sha,
+                            fix_description=fix.description,
+                            patch=fix.patch,
+                            affected_files=fix.affected_files,
+                            branch=pr_branch,
+                            installation_id=installation_id,
+                        )
+                    )
 
     except Exception as exc:
         log.error("manual_pipeline_failed", repo=repo, pr=pr_number, error=str(exc))

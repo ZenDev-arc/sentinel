@@ -27,10 +27,10 @@ export default {
           muted:     '#505050',
         },
         orange: {
-          300: '#fdba74',
-          400: '#fb923c',
-          500: '#f97316',
-          600: '#ea580c',
+          300: '#ff7a33',
+          400: '#ff5400',
+          500: '#e64c00',
+          600: '#cc4300',
         },
         emerald: { 400: '#34d399', 500: '#10b981' },
         red:     { 400: '#f87171', 500: '#ef4444' },
@@ -44,8 +44,8 @@ export default {
         mono:    ['"JetBrains Mono"', 'monospace'],
       },
       boxShadow: {
-        'orange-glow': '0 0 40px -8px rgba(249,115,22,0.3)',
-        'orange-sm':   '0 0 16px -4px rgba(249,115,22,0.25)',
+        'orange-glow': '0 0 40px -8px rgba(255,84,0,0.3)',
+        'orange-sm':   '0 0 16px -4px rgba(255,84,0,0.25)',
       },
       animation: {
         'blink':       'blink 1s step-end infinite',

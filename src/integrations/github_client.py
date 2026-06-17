@@ -71,14 +71,14 @@ class GitHubClient:
 
         # GitHub App authentication (preferred for production)
         if settings.GITHUB_APP_ID and settings.github_app_private_key and self._installation_id:
-            integration = GithubIntegration(
-                auth=Auth.AppAuth(
+            app_auth = Auth.AppInstallationAuth(
+                Auth.AppAuth(
                     app_id=int(settings.GITHUB_APP_ID),
                     private_key=settings.github_app_private_key,
-                )
+                ),
+                self._installation_id,
             )
-            install_auth = integration.get_installation(self._installation_id)
-            self._gh = install_auth.get_github_for_installation()
+            self._gh = Github(auth=app_auth)
             return self._gh
 
         # PAT fallback (simpler, for single-repo setups)
@@ -90,6 +90,34 @@ class GitHubClient:
             "No GitHub authentication configured. "
             "Set GITHUB_TOKEN or GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY_PATH."
         )
+
+    def _get_installation_token(self) -> Optional[str]:
+        """
+        Return a raw bearer token usable in httpx calls.
+
+        For PAT auth this is just the token string.
+        For GitHub App auth this exchanges App credentials for a short-lived
+        installation access token via the GitHub API.
+        """
+        if self._token:
+            return self._token
+
+        if (
+            settings.GITHUB_APP_ID
+            and settings.github_app_private_key
+            and self._installation_id
+        ):
+            integration = GithubIntegration(
+                auth=Auth.AppAuth(
+                    app_id=int(settings.GITHUB_APP_ID),
+                    private_key=settings.github_app_private_key,
+                )
+            )
+            token_obj = integration.get_access_token(self._installation_id)
+            return token_obj.token
+
+        # Last resort — global PAT
+        return settings.GITHUB_TOKEN
 
     def get_repo(self, repo_full_name: str) -> Repository:
         return self._get_gh().get_repo(repo_full_name)
@@ -137,7 +165,7 @@ class GitHubClient:
         if not fix.patch.strip():
             return None
 
-        tok = self._token or settings.GITHUB_TOKEN
+        tok = self._get_installation_token()
         if not tok:
             log.warning("commit_fix_no_token")
             return None
@@ -224,6 +252,29 @@ class GitHubClient:
 
         log.info("fix_committed", sha=new_commit_sha[:8], branch=branch)
         return new_commit_sha
+
+    def get_check_runs(self, repo_full_name: str, commit_sha: str) -> list[dict]:
+        """
+        Return GitHub Actions check runs for a specific commit.
+        Each item has keys: name, status, conclusion.
+        """
+        tok = self._get_installation_token()
+        if not tok:
+            return []
+        headers = {
+            "Authorization": f"Bearer {tok}",
+            "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": _GH_VERSION,
+        }
+        resp = httpx.get(
+            f"{_GH_API}/repos/{repo_full_name}/commits/{commit_sha}/check-runs",
+            headers=headers,
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            log.warning("check_runs_fetch_failed", status=resp.status_code)
+            return []
+        return resp.json().get("check_runs", [])
 
     def create_pr_suggestion(
         self,

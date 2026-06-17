@@ -1,0 +1,52 @@
+# sentinel.yaml — drop this file in your repo root and rename it to sentinel.yaml
+#
+# SENTINEL reads this file from your repo at PR head SHA.
+# All fields are optional — missing fields use the defaults shown here.
+# version: 1 is the only supported schema version.
+
+version: 1
+
+# ── Review settings ───────────────────────────────────────────────────────────
+review:
+  # Suppress findings below this severity level.
+  # Options: info | low | medium | high | critical
+  # Default: info (show everything)
+  min_severity: info
+
+  # Completely disable entire finding categories.
+  # Options: security | performance | style | architecture | test | bug
+  # Example: skip_categories: [style] — stop style findings from showing up in PRs.
+  skip_categories: []
+
+# ── Auto-merge gate settings ──────────────────────────────────────────────────
+gate:
+  # Maximum number of changed lines a patch may have and still be auto-merged.
+  # Patches larger than this are always routed to HUMAN_REQUIRED.
+  # Default: 30
+  max_auto_patch_lines: 30
+
+  # File paths matching ANY of these patterns always require human review,
+  # regardless of patch size or risk level. Substring match, case-insensitive.
+  # These are ADDED ON TOP of the global defaults (auth, payment, migrations, etc.)
+  # Example: always require human review for anything touching the deploy/ folder.
+  always_human_paths: []
+  #  - deploy/
+  #  - infra/
+  #  - scripts/release
+
+# ── Regression detection settings ────────────────────────────────────────────
+regressions:
+  # Set to false to disable regression detection entirely for this repo.
+  enabled: true
+
+  # Cosine similarity threshold (0.0–1.0) to consider a finding a regression.
+  # Higher = fewer false positives but may miss real regressions.
+  # Lower = catches more regressions but may flag unrelated findings.
+  # Default: 0.82
+  threshold: 0.82
+
+  # If true: when any regression is detected in a PR, ALL proposed fixes
+  # in that PR are escalated to HUMAN_REQUIRED (even small, safe patches).
+  # Useful for teams that want a full human review whenever old bugs resurface.
+  # Default: false
+  block_merge: false

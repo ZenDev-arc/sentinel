@@ -19,9 +19,9 @@
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: #000; }
   ::-webkit-scrollbar-thumb { background: #222; }
-  ::-webkit-scrollbar-thumb:hover { background: #f97316; }
+  ::-webkit-scrollbar-thumb:hover { background: #ff5400; }
 
-  ::selection { background: rgba(249,115,22,0.22); color: #fff; }
+  ::selection { background: rgba(255,84,0,0.22); color: #fff; }
 
   /* headings use display font by default */
   h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; }
@@ -32,7 +32,7 @@
   /* ── Hero background ──────────────────────────────────────────────── */
   .hero-bg {
     background:
-      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(249,115,22,0.11) 0%, transparent 65%),
+      radial-gradient(ellipse 90% 55% at 50% -10%, rgba(255,84,0,0.11) 0%, transparent 65%),
       #000000;
   }
 

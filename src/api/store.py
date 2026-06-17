@@ -16,6 +16,7 @@ from typing import Any, Optional
 _RUNS_FILE = Path("./data/runs.json")
 _MAINT_FILE = Path("./data/maintenance.json")
 _APPROVALS_FILE = Path("./data/approvals.json")
+_PATTERNS_FILE = Path("./data/patterns.json")
 
 _lock = Lock()
 
@@ -128,6 +129,17 @@ def list_approvals(status: Optional[str] = "pending") -> list[dict]:
     if status:
         approvals = [a for a in approvals if a.get("status") == status]
     return approvals
+
+
+# ── Cross-PR patterns ──────────────────────────────────────────────────────────
+
+def save_patterns(patterns: list[dict]) -> None:
+    with _lock:
+        _write(_PATTERNS_FILE, patterns)
+
+
+def get_patterns() -> list[dict]:
+    return _read(_PATTERNS_FILE)
 
 
 def update_approval(approval_id: str, status: str, reviewer: str = "human") -> bool:

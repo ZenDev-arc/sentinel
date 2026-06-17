@@ -75,6 +75,16 @@ class PRMetadata(BaseModel):
     installation_id: int | None = None
 
 
+class RegressionMatch(BaseModel):
+    """Evidence that a finding matches a previously-fixed bug in the KB."""
+    kb_entry_id: str
+    original_pr: int | None
+    original_repo: str
+    original_fix_summary: str
+    similarity: float
+    fixed_at: datetime
+
+
 class ReviewFinding(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     category: FindingCategory
@@ -87,6 +97,8 @@ class ReviewFinding(BaseModel):
     suggestion: str = ""
     rationale: str = ""
     kb_hit_ids: list[str] = Field(default_factory=list)
+    is_regression: bool = False
+    regression: RegressionMatch | None = None
 
 
 class TestResult(BaseModel):
@@ -148,6 +160,10 @@ class PipelineState(BaseModel):
     started_at: datetime = Field(default_factory=datetime.utcnow)
     status: PipelineStatus = PipelineStatus.INITIALIZING
 
+    # Token usage (populated by node_finalise from the in-thread ContextVar tracker)
+    token_total: int = 0
+    est_cost_usd: float = 0.0
+
     # Input
     pr: PRMetadata | None = None
     # Raw tar.gz bytes of the repo at PR head — fetched once by node_run_tests,
@@ -185,6 +201,11 @@ class PipelineState(BaseModel):
 
     # When True, always run the full review swarm regardless of risk level
     force_review: bool = False
+
+    # Per-repo policy loaded from sentinel.yaml at the start of each run.
+    # Typed as Any to avoid a circular import with src.core.policy.
+    # Callers cast: from src.core.policy import SentinelPolicy; policy: SentinelPolicy = state.policy
+    policy: Any = None
 
     def has_test_failures(self) -> bool:
         return any(

@@ -15,33 +15,52 @@ Usage:
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from langchain_core.language_models import BaseChatModel
 
 from src.core.config import settings
 
+# Singleton callback — stateless, reads ContextVar at fire time
+_TOKEN_CB = None
 
-@lru_cache(maxsize=4)
+
+def _get_token_cb():
+    global _TOKEN_CB
+    if _TOKEN_CB is None:
+        from src.core.token_tracker import SentinelTokenCallback
+        _TOKEN_CB = SentinelTokenCallback()
+    return _TOKEN_CB
+
+
 def get_llm(tier: str = "fast") -> BaseChatModel:
-    """Return a cached chat model for the requested tier."""
+    """Return a chat model for the requested tier with token tracking attached."""
     provider = settings.LLM_PROVIDER
 
     if provider == "ollama":
-        return _ollama_model(tier)
-    if provider == "groq":
-        return _groq_model(tier)
-    if provider == "anthropic":
-        return _anthropic_model(tier)
-    if provider == "huggingface":
-        return _huggingface_model(tier)
-    if provider == "cascade":
-        return _cascade_model(tier)
+        model = _ollama_model(tier)
+    elif provider == "groq":
+        model = _groq_model(tier)
+    elif provider == "anthropic":
+        model = _anthropic_model(tier)
+    elif provider == "huggingface":
+        model = _huggingface_model(tier)
+    elif provider == "cascade":
+        model = _cascade_model(tier)
+    else:
+        raise ValueError(
+            f"Unsupported LLM_PROVIDER '{provider}'. "
+            "Choose 'cascade', 'groq', 'huggingface', 'ollama', or 'anthropic'."
+        )
 
-    raise ValueError(
-        f"Unsupported LLM_PROVIDER '{provider}'. "
-        "Choose 'cascade', 'groq', 'huggingface', 'ollama', or 'anthropic'."
-    )
+    # Inject token-tracking callback (no-op when no tracker is active).
+    # cascade returns RunnableWithFallbacks which doesn't support .callbacks —
+    # for that case the callback is already injected into the underlying models
+    # inside _cascade_model(), so we skip injection here.
+    if provider != "cascade":
+        cb = _get_token_cb()
+        existing = list(getattr(model, "callbacks", None) or [])
+        if not any(type(c) is type(cb) for c in existing):
+            model.callbacks = existing + [cb]
+    return model
 
 
 def _ollama_model(tier: str) -> BaseChatModel:
@@ -135,6 +154,17 @@ def _cascade_model(tier: str) -> BaseChatModel:
     """
     primary = _groq_model(tier)
     fallback = _huggingface_model(tier)
+
+    # Inject token callback into each underlying model directly so usage is
+    # tracked regardless of which branch of the fallback chain fires.
+    cb = _get_token_cb()
+    for m in (primary, fallback):
+        existing = list(getattr(m, "callbacks", None) or [])
+        if not any(type(c) is type(cb) for c in existing):
+            try:
+                m.callbacks = existing + [cb]
+            except (ValueError, AttributeError):
+                pass
 
     # Only fall back on transient errors — rate limits and server-side failures.
     # Do NOT catch ValueError/TypeError/JSONDecodeError here; those are logic bugs.

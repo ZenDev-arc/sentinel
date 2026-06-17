@@ -5,11 +5,12 @@ import {
 } from 'recharts'
 import {
   Activity, Database, CheckCircle2, XCircle, Clock, RefreshCw,
-  Play, AlertTriangle, ChevronRight, Loader2, ExternalLink,
+  Play, AlertTriangle, ChevronRight, Loader2, ExternalLink, RotateCcw,
+  TrendingUp, Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useApi } from '../hooks/useApi'
-import { api, type KBStats, type Run, type Approval, type AgentInfo } from '../api/client'
+import { api, type KBStats, type Run, type Approval, type AgentInfo, type Pattern } from '../api/client'
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
@@ -188,6 +189,12 @@ function RunsSection() {
                         <span className={riskColor[run.risk_level] ?? 'text-text-muted'}>{run.risk_level}</span>
                       </span>
                     )}
+                    {run.regressions != null && run.regressions > 0 && (
+                      <span className="badge border border-red-500/40 bg-red-500/10 text-xs flex items-center gap-1 text-red-400">
+                        <RotateCcw className="w-3 h-3" />
+                        {run.regressions} regression{run.regressions !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-xs text-text-muted flex-wrap">
                     {run.started_at && <span>{new Date(run.started_at).toLocaleString()}</span>}
@@ -195,6 +202,20 @@ function RunsSection() {
                     {run.auto_fixes !== undefined && <span>{run.auto_fixes} auto-fixed</span>}
                     {run.pending_fixes !== undefined && run.pending_fixes > 0 && (
                       <span className="text-amber-400">{run.pending_fixes} pending</span>
+                    )}
+                    {run.regressions != null && run.regressions > 0 && (
+                      <span className="text-red-400 font-medium">
+                        ⚠ {run.regressions} previously-fixed bug{run.regressions !== 1 ? 's' : ''} reintroduced
+                      </span>
+                    )}
+                    {run.token_total != null && run.token_total > 0 && (
+                      <span className="text-text-muted flex items-center gap-1">
+                        <Zap className="w-3 h-3" />
+                        {run.token_total.toLocaleString()} tokens
+                        {run.est_cost_usd != null && run.est_cost_usd > 0 && (
+                          <span className="text-text-muted"> · ~${run.est_cost_usd.toFixed(4)}</span>
+                        )}
+                      </span>
                     )}
                   </div>
                   {run.error && <div className="text-xs text-red-400 mt-1 truncate">{run.error}</div>}
@@ -406,9 +427,100 @@ function AgentsSection() {
 }
 
 
+const severityBg: Record<string, string> = {
+  high:   'bg-red-500/10 border-red-500/30',
+  medium: 'bg-amber-500/10 border-amber-500/30',
+  low:    'bg-white/5 border-white/20',
+}
+const severityText: Record<string, string> = {
+  high:   'text-red-400',
+  medium: 'text-amber-400',
+  low:    'text-text-muted',
+}
+const patternIcon: Record<string, string> = {
+  recurring_category:   '🔄',
+  high_regression_rate: '🐛',
+  high_finding_volume:  '📊',
+  systemic_kb_entry:    '📌',
+  file_area_hotspot:    '🎯',
+  elevated_risk_trend:  '⚡',
+}
+
+function PatternsSection() {
+  const { data, loading, error, refetch } = useApi(() => api.patterns(), [], { interval: 120_000 })
+  const [triggering, setTriggering] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const runDetector = async () => {
+    setTriggering(true)
+    try {
+      await api.triggerMaintenance('pattern_detector')
+      setMsg('Pattern detection running… refresh in ~30 s.')
+      setTimeout(() => { refetch(); setMsg('') }, 35_000)
+    } finally {
+      setTriggering(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-text-muted uppercase tracking-wider">Cross-PR patterns</p>
+        <button
+          onClick={runDetector}
+          disabled={triggering}
+          className="btn-secondary text-xs py-1.5"
+        >
+          {triggering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Detect Now
+        </button>
+      </div>
+      {msg && <p className="text-xs text-orange-400">{msg}</p>}
+      {loading && <div className="card"><Spinner /></div>}
+      {error && (
+        <div className="card text-sm text-red-400 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" /> {error}
+        </div>
+      )}
+      {!loading && !data?.patterns?.length && (
+        <div className="card">
+          <EmptyState msg="No patterns detected yet. Run the pattern detector or wait for enough pipeline runs to accumulate." />
+        </div>
+      )}
+      {(data?.patterns ?? []).map((p, i) => (
+        <div key={i} className={`card border ${severityBg[p.severity] ?? 'bg-bg-raised border-bg-border'}`}>
+          <div className="flex items-start gap-3">
+            <span className="text-xl shrink-0 mt-0.5">{patternIcon[p.type] ?? '📋'}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-sm font-semibold text-text-primary">{p.title}</span>
+                <span className={`badge border text-xs ${severityBg[p.severity]} ${severityText[p.severity]}`}>
+                  {p.severity}
+                </span>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed">{p.description}</p>
+              {Object.keys(p.evidence).length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {Object.entries(p.evidence).slice(0, 3).map(([k, v]) => (
+                    <span key={k} className="font-mono text-xs px-2 py-0.5 rounded bg-bg-raised border border-bg-border text-text-muted">
+                      {k.replace(/_/g, ' ')}: {String(v)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-text-muted mt-2">{new Date(p.detected_at).toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'runs' | 'approvals' | 'agents'
+type Tab = 'overview' | 'runs' | 'approvals' | 'agents' | 'patterns'
 
 export default function Dashboard() {
   const [tab, setTab] = useState<Tab>('overview')
@@ -419,6 +531,7 @@ export default function Dashboard() {
     { id: 'runs',      label: 'Run History',      icon: Activity },
     { id: 'approvals', label: 'Approvals',        icon: CheckCircle2 },
     { id: 'agents',    label: 'Agents',           icon: RefreshCw },
+    { id: 'patterns',  label: 'Patterns',         icon: TrendingUp },
   ]
 
   return (
@@ -469,6 +582,7 @@ export default function Dashboard() {
         {tab === 'runs'      && <RunsSection />}
         {tab === 'approvals' && <ApprovalsSection />}
         {tab === 'agents'    && <AgentsSection />}
+        {tab === 'patterns'  && <PatternsSection />}
       </div>
     </div>
   )
