@@ -9,6 +9,7 @@ const sections = [
   { id: 'configuration',  label: 'configuration' },
   { id: 'github-setup',   label: 'github setup' },
   { id: 'first-run',      label: 'first run' },
+  { id: 'docker-sandbox', label: 'docker sandbox' },
   { id: 'production',     label: 'production (docker)' },
   { id: 'architecture',   label: 'architecture' },
 ]
@@ -228,6 +229,153 @@ sentinel init`}
             <CodeBlock language="bash" code="sentinel serve" />
             <p className="text-text-muted text-sm mt-6 mb-3 font-mono">run kb maintenance agents manually:</p>
             <CodeBlock language="bash" code="sentinel maintain" />
+          </section>
+
+          {/* Docker Sandbox */}
+          <section id="docker-sandbox" className="mb-14 scroll-mt-20">
+            <h2 className="text-base font-semibold text-white mb-5 font-mono border-b border-bg-border pb-3">
+              docker sandbox
+            </h2>
+
+            <p className="text-text-secondary text-sm leading-relaxed mb-6 font-mono">
+              the sandbox runs generated tests and bug reproduction inside an isolated docker container —
+              no network access, non-root user, hard memory and cpu limits.
+              without it, sentinel still reviews code but skips test execution, coverage analysis, and fix verification.
+            </p>
+
+            {/* What it does */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">what the sandbox enables</h3>
+            <div className="border border-bg-border divide-y divide-bg-border mb-8">
+              {[
+                ['test execution',      'runs pytest / jest against the pr code inside an isolated container'],
+                ['coverage analysis',   'measures real line coverage, not estimated'],
+                ['bug reproduction',    'executes failing code paths to confirm bugs are real, not false positives'],
+                ['fix verification',    'applies proposed patches and re-runs tests to confirm they work'],
+              ].map(([title, desc]) => (
+                <div key={title} className="flex gap-4 px-4 py-3">
+                  <span className="text-orange-400 text-xs font-mono shrink-0 mt-0.5 w-36">{title}</span>
+                  <span className="text-text-secondary text-xs font-mono">{desc}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Prerequisites */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">prerequisites</h3>
+            <div className="border border-bg-border divide-y divide-bg-border mb-8">
+              {[
+                { step: '1', text: 'install docker desktop', link: 'https://www.docker.com/products/docker-desktop/', linkLabel: 'docker.com/products/docker-desktop' },
+                { step: '2', text: 'start docker desktop and wait for "engine running" in the taskbar' },
+                { step: '3', text: 'verify the cli is available: open a terminal and run docker --version' },
+              ].map(({ step, text, link, linkLabel }) => (
+                <div key={step} className="flex gap-4 px-4 py-3">
+                  <span className="text-text-muted text-xs font-mono shrink-0">{step}.</span>
+                  <span className="text-text-secondary text-xs font-mono">
+                    {text}
+                    {link && (
+                      <> — <a href={link} target="_blank" rel="noopener noreferrer" className="text-orange-400 hover:underline">{linkLabel}</a></>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Build */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">build the sandbox image</h3>
+            <p className="text-text-muted text-xs font-mono mb-3">run once from the sentinel project root. takes ~2 minutes on first build, cached on subsequent runs.</p>
+            <CodeBlock
+              language="bash"
+              code={`# clone the sentinel repo first (if you installed via pip, the docker/ dir is included)
+git clone https://github.com/ZenDev-arc/sentinel.git
+cd sentinel
+
+# build the image
+docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .`}
+            />
+            <p className="text-text-muted text-xs font-mono mt-3 mb-8">
+              the image includes python 3.12, pytest, pytest-cov, node 20, jest, ts-jest, and typescript.
+              it intentionally has no network access at runtime.
+            </p>
+
+            {/* Verify */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">verify the image</h3>
+            <CodeBlock
+              language="bash"
+              code={`# should show sentinel-sandbox:latest
+docker images sentinel-sandbox
+
+# quick smoke test — runs pytest with no test files (exit code 5 = no tests found, that's correct)
+docker run --rm --network none sentinel-sandbox:latest pytest --tb=no -q`}
+            />
+            <div className="border border-bg-border bg-bg-surface px-4 py-3 font-mono text-xs mt-3 mb-8">
+              <span className="text-text-muted">expected output  </span>
+              <span className="text-amber-400">no tests ran  ·  exit code 5</span>
+              <span className="text-text-muted ml-4">→ sandbox is working correctly</span>
+            </div>
+
+            {/* Config */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">sandbox configuration</h3>
+            <div className="border border-bg-border overflow-x-auto mb-8">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="border-b border-bg-border bg-bg-surface">
+                    <th className="text-left px-4 py-2.5 text-text-muted font-medium">variable</th>
+                    <th className="text-left px-4 py-2.5 text-text-muted font-medium">default</th>
+                    <th className="text-left px-4 py-2.5 text-text-muted font-medium">description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-bg-border">
+                  {[
+                    ['SANDBOX_IMAGE',          'sentinel-sandbox:latest', 'docker image name — must match what you built'],
+                    ['SANDBOX_MEMORY_LIMIT',   '512m',                   'container memory cap — increase for large test suites'],
+                    ['SANDBOX_CPU_QUOTA',      '50000',                  'cpu quota (50000 = 50% of one core)'],
+                    ['SANDBOX_TIMEOUT_SECONDS','120',                    'hard kill timeout for the container'],
+                    ['DISABLE_SANDBOX',        'false',                  'set to true to skip sandbox entirely (cloud hosting)'],
+                  ].map(([k, d, desc]) => (
+                    <tr key={k} className="hover:bg-bg-surface transition-colors">
+                      <td className="px-4 py-2.5 text-orange-400">{k}</td>
+                      <td className="px-4 py-2.5 text-amber-400">{d}</td>
+                      <td className="px-4 py-2.5 text-text-muted">{desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Troubleshooting */}
+            <h3 className="text-sm font-semibold text-white mb-3 font-mono">troubleshooting</h3>
+            <div className="space-y-4">
+              {[
+                {
+                  error: 'docker: command not found',
+                  fix: 'docker desktop is installed but the cli is not in your path. open a new terminal session — docker desktop adds itself to path on first launch.',
+                },
+                {
+                  error: 'cannot connect to docker daemon',
+                  fix: 'docker desktop is not running. open it from your applications and wait for "engine running" in the taskbar icon before retrying.',
+                },
+                {
+                  error: 'sentinel-sandbox:latest not found',
+                  fix: 'the image has not been built yet. run: docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .',
+                },
+                {
+                  error: 'sandbox_run_done exit_code: 5',
+                  fix: 'exit code 5 means pytest found no test files — this is expected on the first run if your repo has no tests yet. sentinel will generate tests on the next pr.',
+                },
+                {
+                  error: 'sandbox_run_done exit_code: 2',
+                  fix: 'exit code 2 means pytest had a collection error — usually an import error in the generated tests. sentinel will route these to the bug squad agents automatically.',
+                },
+              ].map(({ error, fix }) => (
+                <div key={error} className="border border-bg-border">
+                  <div className="px-4 py-2.5 bg-bg-surface border-b border-bg-border">
+                    <code className="text-orange-400 text-xs">{error}</code>
+                  </div>
+                  <div className="px-4 py-2.5">
+                    <p className="text-text-secondary text-xs font-mono leading-relaxed">{fix}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
 
           {/* Production */}
