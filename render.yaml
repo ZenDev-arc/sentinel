@@ -25,10 +25,6 @@ services:
       - key: API_SECRET_KEY
         generateValue: true
       - key: CHROMA_PERSIST_DIR
-        value: /data/chroma
+        value: /tmp/chroma
       - key: LOG_FILE
-        value: /data/logs/sentinel.log
-    disk:
-      name: sentinel-data
-      mountPath: /data
-      sizeGB: 1
+        value: /tmp/sentinel.log
