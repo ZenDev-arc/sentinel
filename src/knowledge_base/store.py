@@ -129,6 +129,44 @@ class KnowledgeBaseStore:
             return None
         return KBEntry.model_validate_json(result["documents"][0])
 
+    def _lexical_search(
+        self,
+        query: str,
+        repo: str,
+        n_results: int,
+        entry_type: Optional[KBEntryType] = None,
+    ) -> list[KBSearchResult]:
+        """Jaccard keyword-overlap fallback used when embeddings are zero vectors."""
+        try:
+            entries = self.list_all(repo=None, include_archived=False)
+        except Exception:
+            return []
+
+        query_tokens = set(query.lower().split())
+        scored: list[tuple[float, KBEntry]] = []
+        for entry in entries:
+            if entry.repo != repo and repo != "*":
+                continue
+            if entry_type and entry.type != entry_type:
+                continue
+            text = self._embedder.build_kb_text(
+                entry.title, entry.description, entry.payload
+            )
+            entry_tokens = set(text.lower().split())
+            if not entry_tokens:
+                continue
+            overlap = len(query_tokens & entry_tokens)
+            if overlap == 0:
+                continue
+            score = overlap / len(query_tokens | entry_tokens)
+            scored.append((score, entry))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            KBSearchResult(entry=e, similarity=score, distance=1.0 - score)
+            for score, e in scored[:n_results]
+        ]
+
     def search(
         self,
         query: str,
@@ -142,6 +180,10 @@ class KnowledgeBaseStore:
         except Exception as exc:
             log.warning("kb_search_skipped", error=str(exc))
             return []
+
+        if all(v == 0.0 for v in embedding):
+            log.info("kb_search_lexical_fallback", reason="zero_embedding")
+            return self._lexical_search(query, repo, n_results, entry_type)
 
         where: dict = {"$and": [{"archived": False}, {"invalidated": False}]}
         if entry_type:
