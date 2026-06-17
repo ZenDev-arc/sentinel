@@ -13,8 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.regression_detector import (_REGRESSION_THRESHOLD,
-                                          detect_regressions)
+from src.core.regression_detector import _REGRESSION_THRESHOLD, detect_regressions
 from src.core.state import FindingCategory, FindingSeverity, ReviewFinding
 from src.knowledge_base.models import KBEntry, KBEntryType
 

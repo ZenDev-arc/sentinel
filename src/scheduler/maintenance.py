@@ -16,8 +16,7 @@ from __future__ import annotations
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from src.agents.self_healing import (consistency, consolidation, curator,
-                                     drift_checker)
+from src.agents.self_healing import consistency, consolidation, curator, drift_checker
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.knowledge_base.store import KnowledgeBaseStore

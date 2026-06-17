@@ -11,9 +11,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.core.pipeline import build_graph
-from src.core.state import (FindingCategory, FindingSeverity, PipelineState,
-                            PipelineStatus, PRMetadata, ReviewFinding,
-                            RiskLevel, RiskScore, TestResult)
+from src.core.state import (
+    FindingCategory,
+    FindingSeverity,
+    PipelineState,
+    PipelineStatus,
+    PRMetadata,
+    ReviewFinding,
+    RiskLevel,
+    RiskScore,
+    TestResult,
+)
 
 
 def _make_initial_state(

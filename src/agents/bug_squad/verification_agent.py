@@ -24,8 +24,7 @@ from io import BytesIO
 from src.core.logging import get_logger
 from src.core.project_utils import detect_project_type
 from src.core.sandbox import Sandbox
-from src.core.state import (BugReport, FixClassification, PipelineState,
-                            ProposedFix)
+from src.core.state import BugReport, FixClassification, PipelineState, ProposedFix
 
 log = get_logger(__name__)
 

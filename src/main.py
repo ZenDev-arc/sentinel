@@ -437,8 +437,12 @@ def cmd_github_setup(args: argparse.Namespace) -> None:
 
 
 def cmd_maintain(args: argparse.Namespace) -> None:
-    from src.agents.self_healing import (consistency, consolidation, curator,
-                                         drift_checker)
+    from src.agents.self_healing import (
+        consistency,
+        consolidation,
+        curator,
+        drift_checker,
+    )
     from src.core.logging import configure_logging
     from src.knowledge_base.store import KnowledgeBaseStore
 

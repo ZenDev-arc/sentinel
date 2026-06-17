@@ -17,8 +17,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import (BackgroundTasks, FastAPI, HTTPException, Request,
-                     Response, status)
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -30,8 +29,11 @@ from src.api.management import router as management_router
 from src.core.config import settings
 from src.core.logging import configure_logging, get_logger
 from src.integrations.git_utils import fetch_pr_diff, fetch_pr_files
-from src.integrations.github_client import (GitHubClient, build_from_webhook,
-                                            verify_webhook_signature)
+from src.integrations.github_client import (
+    GitHubClient,
+    build_from_webhook,
+    verify_webhook_signature,
+)
 
 log = get_logger(__name__)
 

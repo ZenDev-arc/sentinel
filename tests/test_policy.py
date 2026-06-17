@@ -7,8 +7,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from src.core.policy import (GatePolicy, RegressionPolicy, ReviewPolicy,
-                             SentinelPolicy)
+from src.core.policy import GatePolicy, RegressionPolicy, ReviewPolicy, SentinelPolicy
 
 # ── SentinelPolicy model ──────────────────────────────────────────────────────
 

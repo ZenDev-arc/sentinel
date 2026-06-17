@@ -53,15 +53,25 @@ from typing import Any, Literal
 from langgraph.graph import END, START, StateGraph
 
 from src.agents import orchestrator, risk_scorer
-from src.agents.bug_squad import (fix_proposer_agent, reproduction_agent,
-                                  root_cause_agent, verification_agent)
-from src.agents.review_swarm import (architecture_agent, lead_reviewer,
-                                     performance_agent, security_agent,
-                                     style_agent)
-from src.agents.self_healing import (consistency, consolidation, curator,
-                                     drift_checker)
-from src.agents.test_swarm import (coverage_agent, integration_test_agent,
-                                   module_test_agent)
+from src.agents.bug_squad import (
+    fix_proposer_agent,
+    reproduction_agent,
+    root_cause_agent,
+    verification_agent,
+)
+from src.agents.review_swarm import (
+    architecture_agent,
+    lead_reviewer,
+    performance_agent,
+    security_agent,
+    style_agent,
+)
+from src.agents.self_healing import consistency, consolidation, curator, drift_checker
+from src.agents.test_swarm import (
+    coverage_agent,
+    integration_test_agent,
+    module_test_agent,
+)
 from src.agents.trust_layer import approval_gate, explainability_agent
 from src.core.logging import get_logger
 from src.core.project_utils import detect_project_type

@@ -6,13 +6,23 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.trust_layer.approval_gate import (_build_pr_comment,
-                                                  _is_auto_mergeable, run)
-from src.core.policy import (GatePolicy, RegressionPolicy, ReviewPolicy,
-                             SentinelPolicy)
-from src.core.state import (FindingCategory, FindingSeverity,
-                            FixClassification, PipelineState, PRMetadata,
-                            ProposedFix, ReviewFinding, RiskLevel, RiskScore)
+from src.agents.trust_layer.approval_gate import (
+    _build_pr_comment,
+    _is_auto_mergeable,
+    run,
+)
+from src.core.policy import GatePolicy, RegressionPolicy, ReviewPolicy, SentinelPolicy
+from src.core.state import (
+    FindingCategory,
+    FindingSeverity,
+    FixClassification,
+    PipelineState,
+    PRMetadata,
+    ProposedFix,
+    ReviewFinding,
+    RiskLevel,
+    RiskScore,
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

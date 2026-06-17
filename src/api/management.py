@@ -23,10 +23,18 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from src.api.store import (get_approval, get_last_maintenance, get_patterns,
-                           get_run, list_approvals, list_maintenance,
-                           list_runs, save_maintenance, save_run,
-                           update_approval)
+from src.api.store import (
+    get_approval,
+    get_last_maintenance,
+    get_patterns,
+    get_run,
+    list_approvals,
+    list_maintenance,
+    list_runs,
+    save_maintenance,
+    save_run,
+    update_approval,
+)
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.knowledge_base.store import KnowledgeBaseStore
@@ -329,8 +337,13 @@ async def trigger_maintenance(
 async def _run_maintenance(agent: str, repo_root: str) -> None:
     from datetime import datetime
 
-    from src.agents.self_healing import (consistency, consolidation, curator,
-                                         drift_checker, pattern_detector)
+    from src.agents.self_healing import (
+        consistency,
+        consolidation,
+        curator,
+        drift_checker,
+        pattern_detector,
+    )
 
     kb = _get_kb()
     ran_at = datetime.utcnow().isoformat()

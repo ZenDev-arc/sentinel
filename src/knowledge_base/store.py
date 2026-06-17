@@ -20,8 +20,12 @@ from chromadb.config import Settings as ChromaSettings
 from src.core.config import settings as app_settings
 from src.core.logging import get_logger
 from src.knowledge_base.embedder import Embedder
-from src.knowledge_base.models import (KBEntry, KBEntryType, KBSearchResult,
-                                       ReviewOutcome)
+from src.knowledge_base.models import (
+    KBEntry,
+    KBEntryType,
+    KBSearchResult,
+    ReviewOutcome,
+)
 
 log = get_logger(__name__)
 

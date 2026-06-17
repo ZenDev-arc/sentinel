@@ -22,8 +22,13 @@ from __future__ import annotations
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.core.regression_detector import detect_regressions
-from src.core.state import (FindingSeverity, FixClassification, PipelineState,
-                            ProposedFix, RiskLevel)
+from src.core.state import (
+    FindingSeverity,
+    FixClassification,
+    PipelineState,
+    ProposedFix,
+    RiskLevel,
+)
 from src.knowledge_base.store import KnowledgeBaseStore
 
 log = get_logger(__name__)
