@@ -676,13 +676,21 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Content */}
+      {/* Content — only render sections after connected to avoid hitting localhost */}
       <div className="animate-fade-in">
-        {tab === 'overview'  && <KBHealthSection />}
-        {tab === 'runs'      && <RunsSection />}
-        {tab === 'approvals' && <ApprovalsSection />}
-        {tab === 'agents'    && <AgentsSection />}
-        {tab === 'patterns'  && <PatternsSection />}
+        {connected ? (
+          <>
+            {tab === 'overview'  && <KBHealthSection />}
+            {tab === 'runs'      && <RunsSection />}
+            {tab === 'approvals' && <ApprovalsSection />}
+            {tab === 'agents'    && <AgentsSection />}
+            {tab === 'patterns'  && <PatternsSection />}
+          </>
+        ) : (
+          <div className="py-16 text-center text-sm text-text-muted">
+            Connect to your SENTINEL instance above to view data.
+          </div>
+        )}
       </div>
     </div>
   )
