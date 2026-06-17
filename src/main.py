@@ -582,7 +582,7 @@ def main() -> None:
     # serve
     p_serve = sub.add_parser("serve", help="Start the webhook server")
     p_serve.add_argument("--host", default="0.0.0.0")
-    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", os.environ.get("API_PORT", 8000))))
     p_serve.add_argument("--repo-root", default=".", help="Local path to the monitored repo")
     p_serve.set_defaults(func=cmd_serve)
 
