@@ -64,7 +64,9 @@ def run(state: PipelineState) -> dict:
         # Update result with parsed coverage
         if coverage_map:
             avg_coverage = sum(coverage_map.values()) / len(coverage_map)
-            updated_result = result.model_copy(update={"coverage_percent": avg_coverage})
+            updated_result = result.model_copy(
+                update={"coverage_percent": avg_coverage}
+            )
             updated_results.append(updated_result)
         else:
             updated_results.append(result)

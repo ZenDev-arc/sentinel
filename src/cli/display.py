@@ -15,8 +15,9 @@ from rich.columns import Columns
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import BarColumn, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn
 from rich.progress import Progress as RichProgress
+from rich.progress import SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -24,8 +25,8 @@ from rich.text import Text
 if TYPE_CHECKING:
     from src.core.state import PipelineState
 
-import sys as _sys
 import io as _io
+import sys as _sys
 
 # On Windows the default console codec often can't handle Unicode box/spinner
 # chars. Force UTF-8 so Rich renders correctly.
@@ -40,42 +41,43 @@ console = Console()
 # ── Node label mapping ────────────────────────────────────────────────────────
 
 _NODE_LABEL: dict[str, str] = {
-    "triage":               "Risk assessment",
-    "start_review":         "Starting review swarm",
-    "review_security":      "Security review",
-    "review_performance":   "Performance review",
-    "review_style":         "Style & quality review",
-    "review_architecture":  "Architecture review",
-    "lead_review":          "Lead review synthesis",
-    "generate_tests":       "Test generation",
-    "run_tests":            "Running sandbox tests",
-    "coverage":             "Coverage analysis",
-    "integration_tests":    "Integration tests",
-    "reproduce_bugs":       "Bug reproduction",
-    "root_cause":           "Root cause analysis",
-    "propose_fixes":        "Proposing fixes",
-    "verify_fixes":         "Verifying fixes",
-    "explain":              "Generating explanations",
-    "approval_gate":        "Approval gate",
-    "finalise":             "Finalising report",
+    "triage": "Risk assessment",
+    "start_review": "Starting review swarm",
+    "review_security": "Security review",
+    "review_performance": "Performance review",
+    "review_style": "Style & quality review",
+    "review_architecture": "Architecture review",
+    "lead_review": "Lead review synthesis",
+    "generate_tests": "Test generation",
+    "run_tests": "Running sandbox tests",
+    "coverage": "Coverage analysis",
+    "integration_tests": "Integration tests",
+    "reproduce_bugs": "Bug reproduction",
+    "root_cause": "Root cause analysis",
+    "propose_fixes": "Proposing fixes",
+    "verify_fixes": "Verifying fixes",
+    "explain": "Generating explanations",
+    "approval_gate": "Approval gate",
+    "finalise": "Finalising report",
 }
 
 _SEVERITY_COLOR: dict[str, str] = {
     "critical": "bold red",
-    "high":     "red",
-    "medium":   "yellow",
-    "low":      "cyan",
-    "info":     "dim white",
+    "high": "red",
+    "medium": "yellow",
+    "low": "cyan",
+    "info": "dim white",
 }
 
 _RISK_COLOR: dict[str, str] = {
-    "high":   "bold red",
+    "high": "bold red",
     "medium": "bold yellow",
-    "low":    "bold green",
+    "low": "bold green",
 }
 
 
 # ── Live pipeline runner ───────────────────────────────────────────────────────
+
 
 def run_with_progress(pipeline, initial_state) -> "PipelineState":
     """
@@ -84,8 +86,8 @@ def run_with_progress(pipeline, initial_state) -> "PipelineState":
     """
     from src.core.state import PipelineState
 
-    completed: list[tuple[str, str]] = []   # (label, extra_info)
-    current: list[str] = []                 # current node label
+    completed: list[tuple[str, str]] = []  # (label, extra_info)
+    current: list[str] = []  # current node label
     final_state_raw = None
 
     progress = RichProgress(
@@ -111,7 +113,12 @@ def run_with_progress(pipeline, initial_state) -> "PipelineState":
             t.append(current[0], style="bold yellow")
             lines.append(t)
         body = "\n".join(str(l) for l in lines) if lines else "  Initialising…"
-        return Panel(body, title="[bold cyan]SENTINEL[/bold cyan]", border_style="cyan", padding=(0, 1))
+        return Panel(
+            body,
+            title="[bold cyan]SENTINEL[/bold cyan]",
+            border_style="cyan",
+            padding=(0, 1),
+        )
 
     with Live(_make_panel(), refresh_per_second=8, console=console) as live:
         for event in pipeline.stream(initial_state):
@@ -172,6 +179,7 @@ def run_with_progress(pipeline, initial_state) -> "PipelineState":
 
 # ── Structured report ─────────────────────────────────────────────────────────
 
+
 def print_report(state: "PipelineState", title: str = "SENTINEL REPORT") -> None:
     """Render the full pipeline result as a rich structured report."""
 
@@ -189,13 +197,15 @@ def print_report(state: "PipelineState", title: str = "SENTINEL REPORT") -> None
     summary = Table.grid(padding=(0, 3))
     summary.add_column(style="dim")
     summary.add_column()
-    summary.add_row("Risk level",      risk_text)
-    summary.add_row("Files reviewed",  str(len(state.pr.files_changed) if state.pr else 0))
-    summary.add_row("Findings",        str(len(state.consolidated_findings)))
+    summary.add_row("Risk level", risk_text)
+    summary.add_row(
+        "Files reviewed", str(len(state.pr.files_changed) if state.pr else 0)
+    )
+    summary.add_row("Findings", str(len(state.consolidated_findings)))
     summary.add_row("Tests generated", str(len(state.generated_tests)))
-    summary.add_row("Bugs found",      str(len(state.bug_reports)))
-    summary.add_row("Auto-fixes",      str(len(state.auto_applied_fixes)))
-    summary.add_row("Pending fixes",   str(len(state.pending_human_fixes)))
+    summary.add_row("Bugs found", str(len(state.bug_reports)))
+    summary.add_row("Auto-fixes", str(len(state.auto_applied_fixes)))
+    summary.add_row("Pending fixes", str(len(state.pending_human_fixes)))
     console.print(Panel(summary, title="Summary", border_style="cyan", padding=(0, 2)))
 
     # ── Findings table ────────────────────────────────────────────────────────
@@ -230,7 +240,9 @@ def print_report(state: "PipelineState", title: str = "SENTINEL REPORT") -> None
         console.print()
         console.print(Rule("[bold]Generated Tests[/bold]"))
         for gt in state.generated_tests:
-            console.print(f"  [green]•[/green] [cyan]{gt.file_path}[/cyan]  [dim]{gt.description}[/dim]")
+            console.print(
+                f"  [green]•[/green] [cyan]{gt.file_path}[/cyan]  [dim]{gt.description}[/dim]"
+            )
 
     # ── Sandbox test results ──────────────────────────────────────────────────
     if state.test_results:
@@ -242,7 +254,11 @@ def print_report(state: "PipelineState", title: str = "SENTINEL REPORT") -> None
                 f"  passed [bold green]{r.passed}[/bold green]  "
                 f"failed [{status_col}]{r.failed}[/{status_col}]  "
                 f"errors [{status_col}]{r.errors}[/{status_col}]"
-                + (f"  coverage [bold]{r.coverage_percent:.0f}%[/bold]" if r.coverage_percent is not None else "")
+                + (
+                    f"  coverage [bold]{r.coverage_percent:.0f}%[/bold]"
+                    if r.coverage_percent is not None
+                    else ""
+                )
             )
         for r in state.test_results:
             for ft in r.failing_tests:

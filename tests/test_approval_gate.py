@@ -6,24 +6,22 @@ from __future__ import annotations
 
 import pytest
 
-from src.agents.trust_layer.approval_gate import _build_pr_comment, _is_auto_mergeable, run
-from src.core.policy import GatePolicy, RegressionPolicy, ReviewPolicy, SentinelPolicy
-from src.core.state import (
-    FindingCategory,
-    FindingSeverity,
-    FixClassification,
-    PRMetadata,
-    PipelineState,
-    ProposedFix,
-    ReviewFinding,
-    RiskLevel,
-    RiskScore,
-)
-
+from src.agents.trust_layer.approval_gate import (_build_pr_comment,
+                                                  _is_auto_mergeable, run)
+from src.core.policy import (GatePolicy, RegressionPolicy, ReviewPolicy,
+                             SentinelPolicy)
+from src.core.state import (FindingCategory, FindingSeverity,
+                            FixClassification, PipelineState, PRMetadata,
+                            ProposedFix, ReviewFinding, RiskLevel, RiskScore)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _fix(description: str = "Fix bug", affected_files: list[str] | None = None, patch_lines: int = 5) -> ProposedFix:
+
+def _fix(
+    description: str = "Fix bug",
+    affected_files: list[str] | None = None,
+    patch_lines: int = 5,
+) -> ProposedFix:
     patch_body = "\n".join(
         [f"+line {i}" for i in range(patch_lines // 2)]
         + [f"-line {i}" for i in range(patch_lines - patch_lines // 2)]
@@ -42,8 +40,10 @@ def _finding(
     category: FindingCategory = FindingCategory.BUG,
     is_regression: bool = False,
 ) -> ReviewFinding:
-    from src.core.state import RegressionMatch
     from datetime import datetime
+
+    from src.core.state import RegressionMatch
+
     regression = None
     if is_regression:
         regression = RegressionMatch(
@@ -76,6 +76,7 @@ def _state(**kwargs) -> PipelineState:
 
 
 # ── _is_auto_mergeable ────────────────────────────────────────────────────────
+
 
 class TestIsAutoMergeable:
     def test_small_safe_patch_is_mergeable(self):
@@ -122,6 +123,7 @@ class TestIsAutoMergeable:
 
 # ── run() classification ──────────────────────────────────────────────────────
 
+
 class TestRunClassification:
     def test_small_fix_auto_merged(self):
         state = _state(proposed_fixes=[_fix(patch_lines=4)])
@@ -141,16 +143,19 @@ class TestRunClassification:
         assert len(result["pending_human_fixes"]) == 1
 
     def test_mixed_fixes_classified_correctly(self):
-        state = _state(proposed_fixes=[
-            _fix("safe fix", patch_lines=4),
-            _fix("big fix", patch_lines=60),
-        ])
+        state = _state(
+            proposed_fixes=[
+                _fix("safe fix", patch_lines=4),
+                _fix("big fix", patch_lines=60),
+            ]
+        )
         result = run(state)
         assert len(result["auto_applied_fixes"]) == 1
         assert len(result["pending_human_fixes"]) == 1
 
 
 # ── Policy: min_severity filtering ───────────────────────────────────────────
+
 
 class TestPolicyMinSeverity:
     def test_low_findings_hidden_when_min_medium(self):
@@ -171,10 +176,15 @@ class TestPolicyMinSeverity:
 
     def test_all_findings_shown_with_info_threshold(self):
         policy = SentinelPolicy(review=ReviewPolicy(min_severity="info"))
-        findings = [_finding(s) for s in [
-            FindingSeverity.INFO, FindingSeverity.LOW,
-            FindingSeverity.MEDIUM, FindingSeverity.HIGH,
-        ]]
+        findings = [
+            _finding(s)
+            for s in [
+                FindingSeverity.INFO,
+                FindingSeverity.LOW,
+                FindingSeverity.MEDIUM,
+                FindingSeverity.HIGH,
+            ]
+        ]
         state = _state(policy=policy, consolidated_findings=findings)
         result = run(state)
         # All 4 findings pass through
@@ -182,6 +192,7 @@ class TestPolicyMinSeverity:
 
 
 # ── Policy: skip_categories ───────────────────────────────────────────────────
+
 
 class TestPolicySkipCategories:
     def test_skipped_category_removed(self):
@@ -200,9 +211,12 @@ class TestPolicySkipCategories:
 
 # ── Policy: regression block_merge ───────────────────────────────────────────
 
+
 class TestPolicyRegressionBlockMerge:
     def test_block_merge_forces_human_required(self):
-        policy = SentinelPolicy(regressions=RegressionPolicy(block_merge=True, enabled=False))
+        policy = SentinelPolicy(
+            regressions=RegressionPolicy(block_merge=True, enabled=False)
+        )
         state = _state(
             policy=policy,
             proposed_fixes=[_fix(patch_lines=4)],  # would normally auto-merge
@@ -213,7 +227,9 @@ class TestPolicyRegressionBlockMerge:
         assert len(result["auto_applied_fixes"]) == 0
 
     def test_block_merge_false_allows_auto(self):
-        policy = SentinelPolicy(regressions=RegressionPolicy(block_merge=False, enabled=False))
+        policy = SentinelPolicy(
+            regressions=RegressionPolicy(block_merge=False, enabled=False)
+        )
         state = _state(
             policy=policy,
             proposed_fixes=[_fix(patch_lines=4)],
@@ -224,6 +240,7 @@ class TestPolicyRegressionBlockMerge:
 
 
 # ── PR comment content ────────────────────────────────────────────────────────
+
 
 class TestBuildPrComment:
     def test_regression_section_at_top(self):

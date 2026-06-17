@@ -51,7 +51,7 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str) -> boo
         hashlib.sha256,
     ).hexdigest()
 
-    received = signature_header[len("sha256="):]
+    received = signature_header[len("sha256=") :]
     return hmac.compare_digest(expected, received)
 
 
@@ -70,7 +70,11 @@ class GitHubClient:
             return self._gh
 
         # GitHub App authentication (preferred for production)
-        if settings.GITHUB_APP_ID and settings.github_app_private_key and self._installation_id:
+        if (
+            settings.GITHUB_APP_ID
+            and settings.github_app_private_key
+            and self._installation_id
+        ):
             app_auth = Auth.AppInstallationAuth(
                 Auth.AppAuth(
                     app_id=int(settings.GITHUB_APP_ID),
@@ -189,7 +193,9 @@ class GitHubClient:
         # We pass headers + repo so the parser can fetch current file content
         # from GitHub before applying hunk offsets — necessary to reconstruct
         # complete file content rather than just the diff lines.
-        file_changes = _parse_unified_diff_for_git_api(fix.patch, headers, repo_full_name)
+        file_changes = _parse_unified_diff_for_git_api(
+            fix.patch, headers, repo_full_name
+        )
         if not file_changes:
             log.warning("commit_fix_no_parseable_changes")
             return None
@@ -206,12 +212,14 @@ class GitHubClient:
             if blob_resp.status_code != 201:
                 log.warning("blob_creation_failed", file=file_path)
                 continue
-            new_tree.append({
-                "path": file_path,
-                "mode": "100644",
-                "type": "blob",
-                "sha": blob_resp.json()["sha"],
-            })
+            new_tree.append(
+                {
+                    "path": file_path,
+                    "mode": "100644",
+                    "type": "blob",
+                    "sha": blob_resp.json()["sha"],
+                }
+            )
 
         if not new_tree:
             return None
@@ -297,7 +305,9 @@ class GitHubClient:
         self.post_pr_comment(repo_full_name, pr_number, body)
 
 
-def build_from_webhook(payload: dict, installation_id: Optional[int] = None) -> "GitHubClient":
+def build_from_webhook(
+    payload: dict, installation_id: Optional[int] = None
+) -> "GitHubClient":
     """Factory for creating a client scoped to a webhook event's installation."""
     inst_id = installation_id or payload.get("installation", {}).get("id")
     return GitHubClient(installation_id=inst_id)
@@ -389,7 +399,9 @@ def _apply_diff_hunks(original_lines: list[str], diff_section: str) -> list[str]
                 # Emit original lines that precede this hunk
                 result.extend(original_lines[orig_pos:hunk_start])
                 orig_pos = hunk_start
-        elif line.startswith("---") or line.startswith("+++") or line.startswith("diff "):
+        elif (
+            line.startswith("---") or line.startswith("+++") or line.startswith("diff ")
+        ):
             continue
         elif line.startswith("+"):
             result.append(line[1:])

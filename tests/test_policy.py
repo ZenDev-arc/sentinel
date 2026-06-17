@@ -7,10 +7,11 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from src.core.policy import SentinelPolicy, GatePolicy, RegressionPolicy, ReviewPolicy
-
+from src.core.policy import (GatePolicy, RegressionPolicy, ReviewPolicy,
+                             SentinelPolicy)
 
 # ── SentinelPolicy model ──────────────────────────────────────────────────────
+
 
 class TestSentinelPolicyDefaults:
     def test_all_defaults(self):
@@ -58,7 +59,9 @@ class TestSentinelPolicySeverityFilter:
 
 class TestSentinelPolicyAlwaysHuman:
     def test_matching_path(self):
-        p = SentinelPolicy(gate=GatePolicy(always_human_paths=["deploy/", "migrations/"]))
+        p = SentinelPolicy(
+            gate=GatePolicy(always_human_paths=["deploy/", "migrations/"])
+        )
         assert p.is_always_human("deploy/prod.yaml") is True
         assert p.is_always_human("migrations/0042_add_index.py") is True
 
@@ -87,7 +90,9 @@ class TestSentinelPolicyValidation:
             SentinelPolicy(gate=GatePolicy(max_auto_patch_lines=0))
 
     def test_valid_skip_categories(self):
-        p = SentinelPolicy(review=ReviewPolicy(skip_categories=["style", "performance"]))
+        p = SentinelPolicy(
+            review=ReviewPolicy(skip_categories=["style", "performance"])
+        )
         assert "style" in p.review.skip_categories
 
     def test_from_dict_full(self):
@@ -109,8 +114,8 @@ class TestSentinelPolicyValidation:
         data = {"version": 1, "review": {"min_severity": "high"}}
         p = SentinelPolicy.model_validate(data)
         assert p.review.min_severity == "high"
-        assert p.gate.max_auto_patch_lines == 30   # default
-        assert p.regressions.threshold == 0.82     # default
+        assert p.gate.max_auto_patch_lines == 30  # default
+        assert p.regressions.threshold == 0.82  # default
 
     def test_empty_dict_uses_all_defaults(self):
         p = SentinelPolicy.model_validate({})
@@ -119,6 +124,7 @@ class TestSentinelPolicyValidation:
 
 
 # ── load_policy (unit — mocks GitHub) ────────────────────────────────────────
+
 
 class TestLoadPolicy:
     # GitHubClient is imported inside load_policy's function body, so we patch
@@ -142,8 +148,10 @@ class TestLoadPolicy:
     def test_returns_defaults_when_file_not_found(self, monkeypatch):
         """A 404 from get_contents silently falls through to defaults."""
         import base64
-        from src.core import policy as policy_mod
+
         from github import GithubException
+
+        from src.core import policy as policy_mod
 
         class FakeRepo:
             def get_contents(self, path, ref):
@@ -161,13 +169,16 @@ class TestLoadPolicy:
     def test_parses_valid_yaml(self, monkeypatch):
         """A valid sentinel.yaml is parsed and returned as a SentinelPolicy."""
         import base64
+
         from src.core import policy as policy_mod
 
-        raw_yaml = yaml.dump({
-            "version": 1,
-            "review": {"min_severity": "medium"},
-            "gate": {"max_auto_patch_lines": 10},
-        })
+        raw_yaml = yaml.dump(
+            {
+                "version": 1,
+                "review": {"min_severity": "medium"},
+                "gate": {"max_auto_patch_lines": 10},
+            }
+        )
 
         class FakeContentFile:
             content = base64.b64encode(raw_yaml.encode()).decode()
@@ -191,6 +202,7 @@ class TestLoadPolicy:
     def test_invalid_yaml_falls_back_to_defaults(self, monkeypatch):
         """Malformed YAML returns defaults without crashing."""
         import base64
+
         from src.core import policy as policy_mod
 
         class FakeContentFile:

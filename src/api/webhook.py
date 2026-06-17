@@ -17,20 +17,21 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response, status
+from fastapi import (BackgroundTasks, FastAPI, HTTPException, Request,
+                     Response, status)
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-
 from src.api.management import router as management_router
 from src.core.config import settings
 from src.core.logging import configure_logging, get_logger
-from src.integrations.github_client import GitHubClient, build_from_webhook, verify_webhook_signature
 from src.integrations.git_utils import fetch_pr_diff, fetch_pr_files
+from src.integrations.github_client import (GitHubClient, build_from_webhook,
+                                            verify_webhook_signature)
 
 log = get_logger(__name__)
 
@@ -50,7 +51,7 @@ app = FastAPI(
     description="Self-healing multi-agent code quality pipeline",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url=None,   # disable Swagger UI in production
+    docs_url=None,  # disable Swagger UI in production
     redoc_url=None,
 )
 
@@ -65,7 +66,11 @@ app.add_middleware(
 # CORS — allow the frontend dev server and any deployed frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,9 +82,12 @@ app.include_router(management_router)
 # Serve built frontend from /frontend/dist (production).
 # Mounted at /app/ so API and webhook routes at / are never shadowed.
 from pathlib import Path as _Path
+
 _frontend_dist = _Path(__file__).parent.parent.parent / "frontend" / "dist"
 if _frontend_dist.exists():
-    app.mount("/app", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
+    app.mount(
+        "/app", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend"
+    )
 
 _MAX_BODY_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -91,7 +99,9 @@ async def health() -> dict:
 
 @app.post("/webhook/github")
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
-async def github_webhook(request: Request, background_tasks: BackgroundTasks) -> Response:
+async def github_webhook(
+    request: Request, background_tasks: BackgroundTasks
+) -> Response:
     # Body size guard
     try:
         content_length = int(request.headers.get("content-length", "0"))
@@ -113,6 +123,7 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks) ->
 
     try:
         import json
+
         payload = json.loads(body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
@@ -139,10 +150,11 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks) ->
 
 # ── Background handlers ───────────────────────────────────────────────────────
 
+
 async def _handle_pull_request(payload: dict) -> None:
     """Full SENTINEL pipeline triggered by a PR event."""
     from src.core.pipeline import compile_pipeline
-    from src.core.state import PRMetadata, PipelineState
+    from src.core.state import PipelineState, PRMetadata
 
     pr_data = payload.get("pull_request", {})
     repo_data = payload.get("repository", {})
@@ -178,9 +190,7 @@ async def _handle_pull_request(payload: dict) -> None:
         initial_state = PipelineState(pr=pr_meta)
         pipeline = compile_pipeline()
 
-        final_state_raw = await asyncio.to_thread(
-            pipeline.invoke, initial_state
-        )
+        final_state_raw = await asyncio.to_thread(pipeline.invoke, initial_state)
         # LangGraph returns a plain dict; reconstruct the typed state object.
         if isinstance(final_state_raw, dict):
             final_state = PipelineState.model_validate(final_state_raw)
@@ -227,48 +237,60 @@ async def _handle_pull_request(payload: dict) -> None:
         )
 
         # Persist run summary and pending approvals so the dashboard can display them
-        from src.api.store import save_approval, save_run
         from datetime import datetime as _dt
-        save_run({
-            "run_id": final_state.run_id,
-            "repo": repo_full_name,
-            "pr": pr_number,
-            "started_at": final_state.started_at.isoformat(),
-            "completed_at": _dt.utcnow().isoformat(),
-            "status": final_state.status.value,
-            "findings": len(final_state.consolidated_findings),
-            "tests_generated": len(final_state.generated_tests),
-            "bugs_found": len(final_state.bug_reports),
-            "auto_fixes": len(final_state.auto_applied_fixes),
-            "pending_fixes": len(final_state.pending_human_fixes),
-            "risk_level": final_state.risk.level.value if final_state.risk else None,
-            "risk_score": final_state.risk.score if final_state.risk else None,
-        })
-        for fix in final_state.pending_human_fixes:
-            save_approval({
-                "id": fix.id,
+
+        from src.api.store import save_approval, save_run
+
+        save_run(
+            {
+                "run_id": final_state.run_id,
                 "repo": repo_full_name,
                 "pr": pr_number,
-                "description": fix.description,
-                "rationale": fix.rationale,
-                "patch": fix.patch,
-                "affected_files": fix.affected_files,
-                "classification": fix.classification.value,
-                "run_id": final_state.run_id,
-            })
+                "started_at": final_state.started_at.isoformat(),
+                "completed_at": _dt.utcnow().isoformat(),
+                "status": final_state.status.value,
+                "findings": len(final_state.consolidated_findings),
+                "tests_generated": len(final_state.generated_tests),
+                "bugs_found": len(final_state.bug_reports),
+                "auto_fixes": len(final_state.auto_applied_fixes),
+                "pending_fixes": len(final_state.pending_human_fixes),
+                "risk_level": (
+                    final_state.risk.level.value if final_state.risk else None
+                ),
+                "risk_score": final_state.risk.score if final_state.risk else None,
+            }
+        )
+        for fix in final_state.pending_human_fixes:
+            save_approval(
+                {
+                    "id": fix.id,
+                    "repo": repo_full_name,
+                    "pr": pr_number,
+                    "description": fix.description,
+                    "rationale": fix.rationale,
+                    "patch": fix.patch,
+                    "affected_files": fix.affected_files,
+                    "classification": fix.classification.value,
+                    "run_id": final_state.run_id,
+                }
+            )
 
     except Exception as exc:
         log.error("pipeline_failed", repo=repo_full_name, pr=pr_number, error=str(exc))
-        from src.api.store import save_run
         from datetime import datetime as _dt
-        save_run({
-            "repo": repo_full_name,
-            "pr": pr_number,
-            "started_at": _dt.utcnow().isoformat(),
-            "completed_at": _dt.utcnow().isoformat(),
-            "status": "failed",
-            "error": str(exc),
-        })
+
+        from src.api.store import save_run
+
+        save_run(
+            {
+                "repo": repo_full_name,
+                "pr": pr_number,
+                "started_at": _dt.utcnow().isoformat(),
+                "completed_at": _dt.utcnow().isoformat(),
+                "status": "failed",
+                "error": str(exc),
+            }
+        )
 
 
 async def _handle_push(payload: dict) -> None:
@@ -276,10 +298,7 @@ async def _handle_push(payload: dict) -> None:
     from src.api.store import record_revert
 
     commits = payload.get("commits", [])
-    revert_shas = [
-        c["id"] for c in commits
-        if "revert" in c.get("message", "").lower()
-    ]
+    revert_shas = [c["id"] for c in commits if "revert" in c.get("message", "").lower()]
     if revert_shas:
         log.info("revert_commits_detected", shas=revert_shas)
         for sha in revert_shas:

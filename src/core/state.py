@@ -10,11 +10,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
-
+from pydantic import BaseModel, Field
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
+
 
 class RiskLevel(str, Enum):
     LOW = "low"
@@ -59,6 +59,7 @@ class PipelineStatus(str, Enum):
 
 # ── Sub-models ────────────────────────────────────────────────────────────────
 
+
 class PRMetadata(BaseModel):
     repo_full_name: str
     pr_number: int
@@ -77,6 +78,7 @@ class PRMetadata(BaseModel):
 
 class RegressionMatch(BaseModel):
     """Evidence that a finding matches a previously-fixed bug in the KB."""
+
     kb_entry_id: str
     original_pr: int | None
     original_repo: str
@@ -151,6 +153,7 @@ class RiskScore(BaseModel):
 
 
 # ── Main pipeline state ───────────────────────────────────────────────────────
+
 
 class PipelineState(BaseModel):
     """Complete state flowing through the LangGraph pipeline."""

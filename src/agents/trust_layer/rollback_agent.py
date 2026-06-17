@@ -22,7 +22,7 @@ from src.core.state import FixClassification, ProposedFix
 log = get_logger(__name__)
 
 _POLL_INTERVAL_S = 30
-_MAX_POLLS = 30   # 30 × 30 s = 15 minutes
+_MAX_POLLS = 30  # 30 × 30 s = 15 minutes
 
 
 def _reverse_patch(patch: str) -> str:
@@ -90,11 +90,13 @@ async def watch_and_rollback(
 
         pending = [r for r in runs if r.get("status") != "completed"]
         if pending:
-            continue   # some checks still running
+            continue  # some checks still running
 
         failed = [
-            r for r in runs
-            if r.get("conclusion") in ("failure", "timed_out", "cancelled", "action_required")
+            r
+            for r in runs
+            if r.get("conclusion")
+            in ("failure", "timed_out", "cancelled", "action_required")
         ]
 
         if not failed:
@@ -145,7 +147,7 @@ async def watch_and_rollback(
 
         comment = (
             f"⚠️ **SENTINEL Rollback**\n\n"
-            f"The auto-applied fix **\"{fix_description}\"** was automatically reverted "
+            f'The auto-applied fix **"{fix_description}"** was automatically reverted '
             f"because CI checks failed.\n\n"
             f"**Failed checks:** {failed_names}\n\n"
             f"The fix has been moved to the **Pending Approvals** queue so a human can "

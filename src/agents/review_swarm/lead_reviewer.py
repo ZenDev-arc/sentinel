@@ -18,11 +18,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.llm import get_llm
 from src.core.logging import get_logger
-from src.core.state import (
-    FindingSeverity,
-    PipelineState,
-    ReviewFinding,
-)
+from src.core.state import FindingSeverity, PipelineState, ReviewFinding
 
 log = get_logger(__name__)
 

@@ -46,6 +46,7 @@ class Sandbox:
     def _get_client(self):
         if self._client is None:
             import docker
+
             self._client = docker.from_env()
         return self._client
 
@@ -101,7 +102,7 @@ class Sandbox:
                 demux=True,
             )
 
-            timed_out = (exit_code == 124)  # `timeout` exits 124 on expiry
+            timed_out = exit_code == 124  # `timeout` exits 124 on expiry
             if timed_out:
                 log.warning("sandbox_timeout", command=test_command)
 
@@ -176,7 +177,7 @@ class Sandbox:
             # --transform: use ts-jest for .ts files without a local tsconfig
             jest_cmd = (
                 "jest --no-coverage --forceExit --testEnvironment node "
-                "--transform '{\"^.+\\.tsx?$\":\"ts-jest\"}' "
+                '--transform \'{"^.+\\.tsx?$":"ts-jest"}\' '
                 "--testPathPattern '\\.(test|spec)\\.[jt]sx?$' 2>&1"
             )
             wrapped = f"timeout {timeout_sec} sh -c {shlex.quote(jest_cmd)}"
@@ -188,7 +189,7 @@ class Sandbox:
                 demux=True,
             )
 
-            timed_out = (exit_code == 124)
+            timed_out = exit_code == 124
             if timed_out:
                 log.warning("sandbox_jest_timeout")
 
@@ -209,7 +210,7 @@ class Sandbox:
         stderr = (stderr_bytes or b"").decode("utf-8", errors="replace")
 
         result = self._parse_jest_output(stdout, stderr, exit_code)
-        result.timed_out = timed_out if 'timed_out' in locals() else False
+        result.timed_out = timed_out if "timed_out" in locals() else False
         log.info(
             "sandbox_jest_done",
             exit_code=exit_code,
@@ -230,7 +231,9 @@ class Sandbox:
         """
         if not patch.strip():
             log.warning("sandbox_empty_patch")
-            return SandboxResult(exit_code=1, stdout="", stderr="Empty patch — nothing to apply.")
+            return SandboxResult(
+                exit_code=1, stdout="", stderr="Empty patch — nothing to apply."
+            )
 
         # Write patch to a temp file, inject it, then `git apply` + run tests.
         patch_bytes = patch.encode("utf-8")
@@ -377,7 +380,7 @@ class Sandbox:
 
             with tarfile.open(fileobj=buf_out, mode="w:gz") as tar_out:
                 for member in members:
-                    stripped = member.name[len(top_dir):]
+                    stripped = member.name[len(top_dir) :]
                     if not stripped:
                         continue  # skip the root dir entry itself
                     new_member = copy.copy(member)

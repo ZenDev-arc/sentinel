@@ -97,9 +97,22 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
             continue
 
         if not report.root_cause or "failed" in report.root_cause.lower():
-            updated_reports.append(report.model_copy(update={"candidate_patches": [
-                {"confidence": 0.0, "description": "Skipped: no root cause", "file": "", "original_code": "", "fixed_code": "", "affected_files": []}
-            ]}))
+            updated_reports.append(
+                report.model_copy(
+                    update={
+                        "candidate_patches": [
+                            {
+                                "confidence": 0.0,
+                                "description": "Skipped: no root cause",
+                                "file": "",
+                                "original_code": "",
+                                "fixed_code": "",
+                                "affected_files": [],
+                            }
+                        ]
+                    }
+                )
+            )
             continue
 
         query = f"fix {report.root_cause[:200]} {' '.join(report.affected_files[:3])}"
@@ -110,8 +123,7 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
             entry_type=KBEntryType.BUG_FIX,
         )
         kb_context = "\n".join(
-            f"- Past fix: {h.entry.payload.get('patch', '')[:200]}"
-            for h in kb_hits
+            f"- Past fix: {h.entry.payload.get('patch', '')[:200]}" for h in kb_hits
         )
 
         try:
@@ -120,13 +132,32 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
                 diff=state.pr.diff if state.pr else "",
                 kb_context=kb_context,
             )
-            updated_reports.append(report.model_copy(update={"candidate_patches": [patch]}))
-            log.info("fix_proposed", test=report.failing_test, confidence=patch.get("confidence"))
+            updated_reports.append(
+                report.model_copy(update={"candidate_patches": [patch]})
+            )
+            log.info(
+                "fix_proposed",
+                test=report.failing_test,
+                confidence=patch.get("confidence"),
+            )
         except Exception as exc:
             log.warning("fix_proposal_failed", test=report.failing_test, error=str(exc))
-            updated_reports.append(report.model_copy(update={"candidate_patches": [
-                {"confidence": 0.0, "description": f"Auto-fix failed: {exc}", "file": "", "original_code": "", "fixed_code": "", "affected_files": []}
-            ]}))
+            updated_reports.append(
+                report.model_copy(
+                    update={
+                        "candidate_patches": [
+                            {
+                                "confidence": 0.0,
+                                "description": f"Auto-fix failed: {exc}",
+                                "file": "",
+                                "original_code": "",
+                                "fixed_code": "",
+                                "affected_files": [],
+                            }
+                        ]
+                    }
+                )
+            )
 
         for hit in kb_hits:
             kb.record_use(hit.entry.id)

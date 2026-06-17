@@ -24,7 +24,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.llm import get_llm
 from src.core.logging import get_logger
-from src.core.state import PipelineState, ReviewFinding, ProposedFix
+from src.core.state import PipelineState, ProposedFix, ReviewFinding
 
 log = get_logger(__name__)
 
@@ -67,7 +67,10 @@ def _explain_finding(finding: ReviewFinding) -> str:
         "suggestion": finding.suggestion,
     }
     response = llm.invoke(
-        [SystemMessage(content=_FINDING_SYSTEM), HumanMessage(content=json.dumps(payload))]
+        [
+            SystemMessage(content=_FINDING_SYSTEM),
+            HumanMessage(content=json.dumps(payload)),
+        ]
     )
     text = response.content.strip()
     text = re.sub(r"^```[a-z]*\n?", "", text)
@@ -108,7 +111,9 @@ def run(state: PipelineState) -> dict:
             continue
         try:
             rationale = _explain_finding(finding)
-            annotated_findings.append(finding.model_copy(update={"rationale": rationale}))
+            annotated_findings.append(
+                finding.model_copy(update={"rationale": rationale})
+            )
         except Exception as exc:
             log.warning("explain_finding_failed", finding_id=finding.id, error=str(exc))
             annotated_findings.append(finding)

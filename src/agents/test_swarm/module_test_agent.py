@@ -72,7 +72,7 @@ def _extract_json(text: str) -> dict:
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return json.loads(text[start:i + 1])
+                return json.loads(text[start : i + 1])
     raise ValueError("Unterminated JSON object in response")
 
 
@@ -111,12 +111,17 @@ def _extract_module_diff(full_diff: str, file_path: str) -> str:
 
 def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
     pr = state.pr
-    log.info("module_test_agent_start", repo=pr.repo_full_name, files=len(pr.files_changed))
+    log.info(
+        "module_test_agent_start", repo=pr.repo_full_name, files=len(pr.files_changed)
+    )
 
     # Only generate tests for source files (skip test files, docs, configs)
     testable_files = [
-        f for f in pr.files_changed
-        if not re.search(r"(test_|_test\.|spec\.|\.md$|\.yaml$|\.yml$|\.json$|\.lock$)", f)
+        f
+        for f in pr.files_changed
+        if not re.search(
+            r"(test_|_test\.|spec\.|\.md$|\.yaml$|\.yml$|\.json$|\.lock$)", f
+        )
         and re.search(r"\.(py|js|ts|jsx|tsx|mjs|go|java|rs|rb|cs)$", f)
     ]
 
@@ -145,7 +150,9 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
             generated.append(
                 GeneratedTest(
                     module=data.get("module", file_path),
-                    file_path=data.get("file_path", f"tests/test_{file_path.split('/')[-1]}"),
+                    file_path=data.get(
+                        "file_path", f"tests/test_{file_path.split('/')[-1]}"
+                    ),
                     content=data.get("content", ""),
                     language=data.get("language", "python"),
                     description=data.get("description", ""),

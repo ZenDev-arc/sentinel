@@ -20,7 +20,8 @@ from chromadb.config import Settings as ChromaSettings
 from src.core.config import settings as app_settings
 from src.core.logging import get_logger
 from src.knowledge_base.embedder import Embedder
-from src.knowledge_base.models import KBEntry, KBEntryType, KBSearchResult, ReviewOutcome
+from src.knowledge_base.models import (KBEntry, KBEntryType, KBSearchResult,
+                                       ReviewOutcome)
 
 log = get_logger(__name__)
 
@@ -39,7 +40,9 @@ class KnowledgeBaseStore:
         self._client: chromadb.ClientAPI | None = None
         self._collection = None
 
-    _unavailable: bool = False  # class-level flag so all instances skip after first failure
+    _unavailable: bool = (
+        False  # class-level flag so all instances skip after first failure
+    )
 
     def _ensure_connected(self) -> None:
         if self._client is not None and self._collection is not None:
@@ -57,7 +60,9 @@ class KnowledgeBaseStore:
             )
             log.info("kb_store_connected", collection=self._collection_name)
         except Exception as exc:
-            self._client = None  # reset so next call retries rather than returning early
+            self._client = (
+                None  # reset so next call retries rather than returning early
+            )
             self._collection = None
             KnowledgeBaseStore._unavailable = True
             log.warning("kb_store_unavailable", error=str(exc))
@@ -163,7 +168,9 @@ class KnowledgeBaseStore:
             entry = KBEntry.model_validate_json(doc_json)
             if entry.repo != repo and repo != "*":
                 continue
-            hits.append(KBSearchResult(entry=entry, similarity=similarity, distance=dist))
+            hits.append(
+                KBSearchResult(entry=entry, similarity=similarity, distance=dist)
+            )
 
         hits.sort(key=lambda h: h.similarity, reverse=True)
         return hits[:n_results]

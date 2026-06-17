@@ -124,15 +124,24 @@ def compute_bug_density(
         log.warning("git_repo_open_failed", error=str(exc))
         return {}
 
-    fix_pattern = re.compile(r"\b(fix|bug|patch|issue|error|crash|revert|hotfix)\b", re.I)
+    fix_pattern = re.compile(
+        r"\b(fix|bug|patch|issue|error|crash|revert|hotfix)\b", re.I
+    )
     file_fix_counts: dict[str, int] = {f: 0 for f in files}
     total_fix_commits = 0
 
     for commit in list(repo.iter_commits("HEAD", max_count=lookback_commits)):
         if fix_pattern.search(commit.message):
             total_fix_commits += 1
-            changed = {item.a_path for item in commit.diff(commit.parents[0]) if commit.parents} \
-                if commit.parents else set()
+            changed = (
+                {
+                    item.a_path
+                    for item in commit.diff(commit.parents[0])
+                    if commit.parents
+                }
+                if commit.parents
+                else set()
+            )
             for f in files:
                 if f in changed:
                     file_fix_counts[f] += 1

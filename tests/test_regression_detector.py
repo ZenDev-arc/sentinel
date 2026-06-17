@@ -13,15 +13,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.regression_detector import _REGRESSION_THRESHOLD, detect_regressions
+from src.core.regression_detector import (_REGRESSION_THRESHOLD,
+                                          detect_regressions)
 from src.core.state import FindingCategory, FindingSeverity, ReviewFinding
 from src.knowledge_base.models import KBEntry, KBEntryType
 
-
 # ── Stub KB ───────────────────────────────────────────────────────────────────
+
 
 class _KBSearchResult:
     """Minimal stand-in for KBSearchResult."""
+
     def __init__(self, entry: KBEntry, similarity: float):
         self.entry = entry
         self.similarity = similarity
@@ -32,6 +34,7 @@ class StubKB:
     A KB stub that returns pre-programmed search results.
     Tracks record_use() calls so we can assert on them.
     """
+
     def __init__(self, results: list[_KBSearchResult] | None = None):
         self._results: list[_KBSearchResult] = results or []
         self.used_ids: list[str] = []
@@ -65,7 +68,11 @@ def _make_entry(
     )
 
 
-def _finding(title: str = "SQL injection in login", description: str = "desc", file_path: str = "src/auth.py") -> ReviewFinding:
+def _finding(
+    title: str = "SQL injection in login",
+    description: str = "desc",
+    file_path: str = "src/auth.py",
+) -> ReviewFinding:
     return ReviewFinding(
         category=FindingCategory.SECURITY,
         severity=FindingSeverity.HIGH,
@@ -76,6 +83,7 @@ def _finding(title: str = "SQL injection in login", description: str = "desc", f
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestDetectRegressions:
     def test_empty_findings_returns_empty(self):
@@ -106,7 +114,9 @@ class TestDetectRegressions:
     def test_below_threshold_not_flagged(self):
         entry = _make_entry()
         # similarity just below the default threshold
-        kb = StubKB(results=[_KBSearchResult(entry, similarity=_REGRESSION_THRESHOLD - 0.01)])
+        kb = StubKB(
+            results=[_KBSearchResult(entry, similarity=_REGRESSION_THRESHOLD - 0.01)]
+        )
 
         result = detect_regressions([_finding()], "acme/backend", kb)
         assert result[0].is_regression is False
@@ -135,7 +145,9 @@ class TestDetectRegressions:
         result_default = detect_regressions([_finding()], "acme/backend", kb)
         assert result_default[0].is_regression is True
 
-        result_strict = detect_regressions([_finding()], "acme/backend", kb, threshold=1.0)
+        result_strict = detect_regressions(
+            [_finding()], "acme/backend", kb, threshold=1.0
+        )
         assert result_strict[0].is_regression is False
 
     def test_record_use_called_on_match(self):
@@ -170,17 +182,22 @@ class TestDetectRegressions:
 
         class SelectiveKB:
             used_ids: list = []
+
             def search(self, query, repo, n_results, entry_type=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count == 1:
                     return [_KBSearchResult(entry, similarity=0.90)]
                 return []
+
             def record_use(self, entry_id):
                 self.used_ids.append(entry_id)
 
         kb = SelectiveKB()
-        findings = [_finding("SQL injection", "desc1"), _finding("Missing rate limit", "desc2")]
+        findings = [
+            _finding("SQL injection", "desc1"),
+            _finding("Missing rate limit", "desc2"),
+        ]
         result = detect_regressions(findings, "acme/backend", kb)
 
         assert result[0].is_regression is True
@@ -188,9 +205,11 @@ class TestDetectRegressions:
 
     def test_kb_search_failure_does_not_crash(self):
         """A KB search error is swallowed — finding passes through untagged."""
+
         class BrokenKB:
             def search(self, *args, **kwargs):
                 raise RuntimeError("chroma unavailable")
+
             def record_use(self, *args):
                 pass
 
@@ -202,11 +221,13 @@ class TestDetectRegressions:
         """When multiple hits pass the threshold, only the best one is used."""
         entry1 = _make_entry(title="entry 1", pr_number=1)
         entry2 = _make_entry(title="entry 2", pr_number=2)
-        kb = StubKB(results=[
-            _KBSearchResult(entry1, similarity=0.95),
-            _KBSearchResult(entry2, similarity=0.90),
-        ])
+        kb = StubKB(
+            results=[
+                _KBSearchResult(entry1, similarity=0.95),
+                _KBSearchResult(entry2, similarity=0.90),
+            ]
+        )
 
         result = detect_regressions([_finding()], "acme/backend", kb)
         assert result[0].regression.original_pr == 1  # first hit wins
-        assert len(kb.used_ids) == 1                  # only first hit recorded
+        assert len(kb.used_ids) == 1  # only first hit recorded

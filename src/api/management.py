@@ -23,18 +23,10 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from src.api.store import (
-    get_approval,
-    get_last_maintenance,
-    get_patterns,
-    get_run,
-    list_approvals,
-    list_maintenance,
-    list_runs,
-    save_maintenance,
-    save_run,
-    update_approval,
-)
+from src.api.store import (get_approval, get_last_maintenance, get_patterns,
+                           get_run, list_approvals, list_maintenance,
+                           list_runs, save_maintenance, save_run,
+                           update_approval)
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.knowledge_base.store import KnowledgeBaseStore
@@ -53,6 +45,7 @@ def _get_kb() -> KnowledgeBaseStore:
 
 
 # ── Status ────────────────────────────────────────────────────────────────────
+
 
 @router.get("/status")
 async def get_status() -> dict:
@@ -82,6 +75,7 @@ async def get_status() -> dict:
 
 # ── Pipeline runs ──────────────────────────────────────────────────────────────
 
+
 @router.get("/runs")
 async def get_runs(limit: int = 50, repo: Optional[str] = None) -> dict:
     runs = list_runs(limit=limit, repo=repo)
@@ -97,6 +91,7 @@ async def get_run_detail(run_id: str) -> dict:
 
 
 # ── Knowledge Base stats ───────────────────────────────────────────────────────
+
 
 @router.get("/kb/stats")
 async def get_kb_stats() -> dict:
@@ -158,6 +153,7 @@ async def get_kb_stats() -> dict:
 
 
 # ── Approvals ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/approvals")
 async def get_approvals(status: Optional[str] = "pending") -> dict:
@@ -222,7 +218,9 @@ async def _commit_approved_fix(approval: dict, reviewer: str) -> None:
         )
 
         if commit_sha:
-            log.info("approved_fix_committed", sha=commit_sha[:8], repo=repo, pr=pr_number)
+            log.info(
+                "approved_fix_committed", sha=commit_sha[:8], repo=repo, pr=pr_number
+            )
         else:
             log.warning("approved_fix_commit_failed", repo=repo, pr=pr_number)
 
@@ -250,6 +248,7 @@ async def reject_fix(approval_id: str, body: ApprovalAction) -> dict:
 
 
 # ── Agent / maintenance status ─────────────────────────────────────────────────
+
 
 @router.get("/agents/status")
 async def get_agent_status() -> dict:
@@ -311,8 +310,11 @@ async def get_agent_status() -> dict:
 
 # ── Maintenance trigger ────────────────────────────────────────────────────────
 
+
 class MaintenanceTrigger(BaseModel):
-    agent: str = "all"  # "all" | "curator" | "drift_checker" | "consistency" | "consolidation"
+    agent: str = (
+        "all"  # "all" | "curator" | "drift_checker" | "consistency" | "consolidation"
+    )
     repo_root: str = "."
 
 
@@ -325,8 +327,10 @@ async def trigger_maintenance(
 
 
 async def _run_maintenance(agent: str, repo_root: str) -> None:
-    from src.agents.self_healing import consolidation, consistency, curator, drift_checker, pattern_detector
     from datetime import datetime
+
+    from src.agents.self_healing import (consistency, consolidation, curator,
+                                         drift_checker, pattern_detector)
 
     kb = _get_kb()
     ran_at = datetime.utcnow().isoformat()
@@ -374,13 +378,16 @@ async def _run_maintenance(agent: str, repo_root: str) -> None:
 
 # ── Pipeline manual trigger ────────────────────────────────────────────────────
 
+
 class PipelineTrigger(BaseModel):
     repo: str
     pr_number: int
 
 
 @router.post("/pipeline/trigger")
-async def trigger_pipeline(body: PipelineTrigger, background_tasks: BackgroundTasks) -> dict:
+async def trigger_pipeline(
+    body: PipelineTrigger, background_tasks: BackgroundTasks
+) -> dict:
     background_tasks.add_task(_run_pipeline, body.repo, body.pr_number)
     return {"status": "triggered", "repo": body.repo, "pr": body.pr_number}
 
@@ -409,7 +416,11 @@ async def _run_pipeline(repo: str, pr_number: int) -> None:
         pipeline = compile_pipeline()
         state = PipelineState(pr=pr_meta)
         final_raw = await asyncio.to_thread(pipeline.invoke, state)
-        final: PipelineState = PipelineState.model_validate(final_raw) if isinstance(final_raw, dict) else final_raw
+        final: PipelineState = (
+            PipelineState.model_validate(final_raw)
+            if isinstance(final_raw, dict)
+            else final_raw
+        )
 
         # Token usage is stored in state by node_finalise (runs in pipeline thread)
         token_total = final.token_total
@@ -421,41 +432,49 @@ async def _run_pipeline(repo: str, pr_number: int) -> None:
             cat = f.category.value
             finding_categories[cat] = finding_categories.get(cat, 0) + 1
 
-        run_record.update({
-            "run_id": final.run_id,
-            "status": final.status.value,
-            "completed_at": datetime.utcnow().isoformat(),
-            "findings": len(final.consolidated_findings),
-            "regressions": sum(1 for f in final.consolidated_findings if f.is_regression),
-            "finding_categories": finding_categories,
-            "tests_generated": len(final.generated_tests),
-            "bugs_found": len(final.bug_reports),
-            "auto_fixes": len(final.auto_applied_fixes),
-            "pending_fixes": len(final.pending_human_fixes),
-            "risk_level": final.risk.level.value if final.risk else None,
-            "risk_score": final.risk.score if final.risk else None,
-            "token_total": token_total,
-            "est_cost_usd": est_cost_usd,
-        })
+        run_record.update(
+            {
+                "run_id": final.run_id,
+                "status": final.status.value,
+                "completed_at": datetime.utcnow().isoformat(),
+                "findings": len(final.consolidated_findings),
+                "regressions": sum(
+                    1 for f in final.consolidated_findings if f.is_regression
+                ),
+                "finding_categories": finding_categories,
+                "tests_generated": len(final.generated_tests),
+                "bugs_found": len(final.bug_reports),
+                "auto_fixes": len(final.auto_applied_fixes),
+                "pending_fixes": len(final.pending_human_fixes),
+                "risk_level": final.risk.level.value if final.risk else None,
+                "risk_score": final.risk.score if final.risk else None,
+                "token_total": token_total,
+                "est_cost_usd": est_cost_usd,
+            }
+        )
 
         # Save pending approvals
         for fix in final.pending_human_fixes:
             from src.api.store import save_approval
-            save_approval({
-                "id": fix.id,
-                "repo": repo,
-                "pr": pr_number,
-                "description": fix.description,
-                "rationale": fix.rationale,
-                "patch": fix.patch,
-                "affected_files": fix.affected_files,
-                "classification": fix.classification.value,
-                "run_id": final.run_id,
-            })
+
+            save_approval(
+                {
+                    "id": fix.id,
+                    "repo": repo,
+                    "pr": pr_number,
+                    "description": fix.description,
+                    "rationale": fix.rationale,
+                    "patch": fix.patch,
+                    "affected_files": fix.affected_files,
+                    "classification": fix.classification.value,
+                    "run_id": final.run_id,
+                }
+            )
 
         # Launch CI watcher for each auto-applied fix (fire-and-forget)
         if final.auto_applied_fixes and final.pr:
             from src.agents.trust_layer import rollback_agent
+
             pr_branch = final.pr.head_branch
             installation_id = final.pr.installation_id
             for fix in final.auto_applied_fixes:
@@ -476,10 +495,12 @@ async def _run_pipeline(repo: str, pr_number: int) -> None:
 
     except Exception as exc:
         log.error("manual_pipeline_failed", repo=repo, pr=pr_number, error=str(exc))
-        run_record.update({
-            "status": "failed",
-            "error": str(exc),
-            "completed_at": datetime.utcnow().isoformat(),
-        })
+        run_record.update(
+            {
+                "status": "failed",
+                "error": str(exc),
+                "completed_at": datetime.utcnow().isoformat(),
+            }
+        )
 
     save_run(run_record)

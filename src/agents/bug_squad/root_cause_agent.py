@@ -78,11 +78,19 @@ def _analyse_batch(repros: list[dict], diff: str, kb_context: str) -> list[dict]
     prompt = ""
     if kb_context:
         prompt += f"Similar past bugs:\n{kb_context}\n\n"
-    repros_text = json.dumps([
-        {"failing_test": r["failing_test"], "minimal_repro": r["minimal_repro"][:800]}
-        for r in repros
-    ], indent=2)
-    prompt += f"Bug repros:\n{repros_text}\n\nPR diff (first 4000 chars):\n{diff[:4000]}"
+    repros_text = json.dumps(
+        [
+            {
+                "failing_test": r["failing_test"],
+                "minimal_repro": r["minimal_repro"][:800],
+            }
+            for r in repros
+        ],
+        indent=2,
+    )
+    prompt += (
+        f"Bug repros:\n{repros_text}\n\nPR diff (first 4000 chars):\n{diff[:4000]}"
+    )
     response = llm.invoke(
         [SystemMessage(content=_SYSTEM_BATCH), HumanMessage(content=prompt)]
     )
@@ -132,11 +140,19 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
         by_test = {d.get("failing_test", ""): d for d in batch}
         updated = []
         for i, report in enumerate(needs_analysis):
-            data = by_test.get(report.failing_test) or (batch[i] if i < len(batch) else {})
-            updated.append(report.model_copy(update={
-                "root_cause": data.get("root_cause", "Unknown"),
-                "affected_files": data.get("affected_files", report.affected_files),
-            }))
+            data = by_test.get(report.failing_test) or (
+                batch[i] if i < len(batch) else {}
+            )
+            updated.append(
+                report.model_copy(
+                    update={
+                        "root_cause": data.get("root_cause", "Unknown"),
+                        "affected_files": data.get(
+                            "affected_files", report.affected_files
+                        ),
+                    }
+                )
+            )
     except Exception as exc:
         log.warning("root_cause_batch_failed", error=str(exc))
         updated = [

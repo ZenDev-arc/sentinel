@@ -111,7 +111,9 @@ class TestRiskScorerRun:
 
     def test_llm_failure_falls_back_to_heuristic(self):
         state = _make_state(additions=200, deletions=50)
-        with patch("src.agents.risk_scorer._llm_score", side_effect=Exception("LLM down")):
+        with patch(
+            "src.agents.risk_scorer._llm_score", side_effect=Exception("LLM down")
+        ):
             result = run(state)
         # Should still return a valid risk score
         assert result["risk"] is not None

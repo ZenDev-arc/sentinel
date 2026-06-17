@@ -52,34 +52,16 @@ from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
 
-from src.agents import (
-    orchestrator,
-    risk_scorer,
-)
-from src.agents.bug_squad import (
-    fix_proposer_agent,
-    reproduction_agent,
-    root_cause_agent,
-    verification_agent,
-)
-from src.agents.review_swarm import (
-    architecture_agent,
-    lead_reviewer,
-    performance_agent,
-    security_agent,
-    style_agent,
-)
-from src.agents.self_healing import (
-    consolidation,
-    consistency,
-    curator,
-    drift_checker,
-)
-from src.agents.test_swarm import (
-    coverage_agent,
-    integration_test_agent,
-    module_test_agent,
-)
+from src.agents import orchestrator, risk_scorer
+from src.agents.bug_squad import (fix_proposer_agent, reproduction_agent,
+                                  root_cause_agent, verification_agent)
+from src.agents.review_swarm import (architecture_agent, lead_reviewer,
+                                     performance_agent, security_agent,
+                                     style_agent)
+from src.agents.self_healing import (consistency, consolidation, curator,
+                                     drift_checker)
+from src.agents.test_swarm import (coverage_agent, integration_test_agent,
+                                   module_test_agent)
 from src.agents.trust_layer import approval_gate, explainability_agent
 from src.core.logging import get_logger
 from src.core.project_utils import detect_project_type
@@ -111,9 +93,10 @@ def get_sandbox() -> Sandbox:
 # ── Node wrappers ─────────────────────────────────────────────────────────────
 # Each node receives the full PipelineState and returns a partial dict.
 
+
 def node_load_policy(state: PipelineState) -> dict:
     """Fetch sentinel.yaml from the PR's repo and store it in state before any agent runs."""
-    from src.core.policy import load_policy, SentinelPolicy
+    from src.core.policy import SentinelPolicy, load_policy
     from src.core.token_tracker import RunTokenTracker, set_tracker
 
     # Activate a fresh token tracker for this run
@@ -138,6 +121,7 @@ def node_triage(state: PipelineState) -> dict:
 def _run_with_timeout(fn, *args, timeout: int = 60) -> dict:
     """Run a review agent with a hard timeout so one hung LLM call can't block the pipeline."""
     import concurrent.futures
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         fut = ex.submit(fn, *args)
         try:
@@ -198,10 +182,14 @@ def node_run_tests(state: PipelineState) -> dict:
             )
         except Exception as exc:
             log.warning("archive_failed", error=str(exc))
-            return {"test_results": [], "errors": state.errors + [f"Sandbox archive failed: {exc}"]}
+            return {
+                "test_results": [],
+                "errors": state.errors + [f"Sandbox archive failed: {exc}"],
+            }
 
     # Skip sandbox when Docker is unavailable on the host
     import os
+
     if os.environ.get("DISABLE_SANDBOX", "").lower() in ("1", "true", "yes"):
         log.info("sandbox_skipped", reason="DISABLE_SANDBOX=true")
         return {"test_results": []}
@@ -210,7 +198,10 @@ def node_run_tests(state: PipelineState) -> dict:
         sandbox = get_sandbox()
     except Exception as _docker_err:
         log.warning("sandbox_docker_unavailable", error=str(_docker_err))
-        return {"test_results": [], "errors": state.errors + ["Docker unavailable — sandbox skipped"]}
+        return {
+            "test_results": [],
+            "errors": state.errors + ["Docker unavailable — sandbox skipped"],
+        }
 
     if project_type == "javascript":
         log.info("sandbox_running_jest", files=len(pr.files_changed))
@@ -220,7 +211,9 @@ def node_run_tests(state: PipelineState) -> dict:
             log.info("sandbox_jest_no_tests_found")
             test_result = TestResult(
                 module="all",
-                passed=0, failed=0, errors=0,
+                passed=0,
+                failed=0,
+                errors=0,
                 coverage_percent=None,
                 failing_tests=[],
                 stdout=(
@@ -296,6 +289,7 @@ def node_approval_gate(state: PipelineState) -> dict:
 
 def node_finalise(state: PipelineState) -> dict:
     from src.core.token_tracker import get_tracker
+
     tracker = get_tracker()
     result = {**orchestrator.run(state, get_kb()), "status": PipelineStatus.DONE}
     if tracker:
@@ -305,6 +299,7 @@ def node_finalise(state: PipelineState) -> dict:
 
 
 # ── Conditional routing ───────────────────────────────────────────────────────
+
 
 def route_after_triage(
     state: PipelineState,
@@ -324,7 +319,9 @@ def route_after_tests(state: PipelineState) -> Literal["coverage", "reproduce_bu
     return "coverage"
 
 
-def route_integration_tests(state: PipelineState) -> Literal["integration_tests", "explain"]:
+def route_integration_tests(
+    state: PipelineState,
+) -> Literal["integration_tests", "explain"]:
     if state.risk and state.risk.level != RiskLevel.LOW:
         return "integration_tests"
     return "explain"
@@ -335,6 +332,7 @@ def route_after_integration(state: PipelineState) -> Literal["explain"]:
 
 
 # ── Graph construction ────────────────────────────────────────────────────────
+
 
 def node_start_review(_state: PipelineState) -> dict:
     """No-op fan-out gate — allows conditional routing before the parallel swarm."""
@@ -417,8 +415,10 @@ def compile_pipeline():
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
+
 def _extract_failing_tests(stdout: str) -> list[str]:
     import re
+
     failing = []
 
     # pytest: "FAILED tests/test_foo.py::test_bar - AssertionError"

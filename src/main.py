@@ -52,7 +52,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
 def cmd_run(args: argparse.Namespace) -> None:
     from src.core.logging import configure_logging
     from src.core.pipeline import compile_pipeline
-    from src.core.state import PRMetadata, PipelineState
+    from src.core.state import PipelineState, PRMetadata
     from src.integrations.git_utils import fetch_pr_diff, fetch_pr_files
     from src.integrations.github_client import GitHubClient
 
@@ -64,11 +64,16 @@ def cmd_run(args: argparse.Namespace) -> None:
     pr_meta = gh.fetch_pr_metadata(args.repo, args.pr)
     pr_meta = pr_meta.model_copy(update={"diff": diff, "files_changed": files})
 
-    initial_state = PipelineState(pr=pr_meta, force_review=getattr(args, "force_review", False))
+    initial_state = PipelineState(
+        pr=pr_meta, force_review=getattr(args, "force_review", False)
+    )
     pipeline = compile_pipeline()
 
     from rich.console import Console
-    Console().print(f"\n[bold cyan]SENTINEL[/bold cyan]  [cyan]{args.repo}#{args.pr}[/cyan]\n")
+
+    Console().print(
+        f"\n[bold cyan]SENTINEL[/bold cyan]  [cyan]{args.repo}#{args.pr}[/cyan]\n"
+    )
     _run_and_display(pipeline, initial_state, report_title="SENTINEL PR REPORT")
 
 
@@ -82,7 +87,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     from src.core.logging import configure_logging
     from src.core.pipeline import compile_pipeline
-    from src.core.state import PRMetadata, PipelineState
+    from src.core.state import PipelineState, PRMetadata
 
     configure_logging(quiet=True)
 
@@ -91,7 +96,19 @@ def cmd_scan(args: argparse.Namespace) -> None:
         print(f"Error: path '{scan_path}' does not exist.")
         sys.exit(1)
 
-    _SKIP = (".git", "__pycache__", ".egg-info", "node_modules", ".venv", "venv", "dist", "build", ".next", "coverage", ".turbo")
+    _SKIP = (
+        ".git",
+        "__pycache__",
+        ".egg-info",
+        "node_modules",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+        ".next",
+        "coverage",
+        ".turbo",
+    )
     _SOURCE_EXTS = (".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs")
 
     def _collect_source_files(root: "Path") -> "tuple[list[str], str, int]":
@@ -110,7 +127,9 @@ def cmd_scan(args: argparse.Namespace) -> None:
                 content = p.read_text(encoding="utf-8", errors="replace")
                 lines = content.splitlines()
                 added += len(lines)
-                full_diff += f"\n--- /dev/null\n+++ b/{rel}\n@@ -0,0 +1,{len(lines)} @@\n"
+                full_diff += (
+                    f"\n--- /dev/null\n+++ b/{rel}\n@@ -0,0 +1,{len(lines)} @@\n"
+                )
                 full_diff += "\n".join(f"+{l}" for l in lines) + "\n"
             except Exception:
                 pass
@@ -126,18 +145,46 @@ def cmd_scan(args: argparse.Namespace) -> None:
         files_changed, diff, additions = _collect_source_files(scan_path)
     elif args.staged:
         diff_cmd = ["git", "diff", "--cached"]
-        result = subprocess.run(diff_cmd, capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            diff_cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(scan_path),
+            encoding="utf-8",
+            errors="replace",
+        )
         diff = result.stdout
     elif args.branch:
         diff_cmd = ["git", "diff", args.branch]
-        result = subprocess.run(diff_cmd, capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            diff_cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(scan_path),
+            encoding="utf-8",
+            errors="replace",
+        )
         diff = result.stdout
     else:
-        result = subprocess.run(["git", "diff", "HEAD"], capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            ["git", "diff", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=str(scan_path),
+            encoding="utf-8",
+            errors="replace",
+        )
         diff = result.stdout
         # If working tree is clean, fall back to last commit's changes
         if not diff.strip():
-            result = subprocess.run(["git", "diff", "HEAD~1", "HEAD"], capture_output=True, text=True, cwd=str(scan_path), encoding="utf-8", errors="replace")
+            result = subprocess.run(
+                ["git", "diff", "HEAD~1", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=str(scan_path),
+                encoding="utf-8",
+                errors="replace",
+            )
             diff = result.stdout
 
     # ── Parse files + line counts from diff (when not using --all) ────────────
@@ -164,7 +211,9 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # ── Detect repo name from git remote ──────────────────────────────────────
     remote = subprocess.run(
         ["git", "remote", "get-url", "origin"],
-        capture_output=True, text=True, cwd=str(scan_path),
+        capture_output=True,
+        text=True,
+        cwd=str(scan_path),
     )
     repo_name = "local/scan"
     if remote.returncode == 0:
@@ -203,37 +252,47 @@ def cmd_scan(args: argparse.Namespace) -> None:
         deletions=deletions,
     )
 
-    initial_state = PipelineState(pr=pr_meta, repo_archive=repo_archive, force_review=getattr(args, "force_review", False))
+    initial_state = PipelineState(
+        pr=pr_meta,
+        repo_archive=repo_archive,
+        force_review=getattr(args, "force_review", False),
+    )
     pipeline = compile_pipeline()
 
+    from rich import box as rbox
     from rich.console import Console
     from rich.table import Table
-    from rich import box as rbox
+
     c = Console()
     c.print()
     c.print(f"[bold cyan]SENTINEL[/bold cyan]  local scan")
     info = Table.grid(padding=(0, 3))
     info.add_column(style="dim")
     info.add_column(style="cyan")
-    info.add_row("Path",  str(scan_path))
-    info.add_row("Repo",  repo_name)
+    info.add_row("Path", str(scan_path))
+    info.add_row("Repo", repo_name)
     info.add_row("Files", str(len(files_changed)))
     info.add_row("Lines", f"+{additions}  -{deletions}")
     c.print(info)
     c.print()
 
     from src.cli.display import print_report, run_with_progress
+
     final_state = run_with_progress(pipeline, initial_state)
     print_report(final_state, title="SENTINEL LOCAL SCAN REPORT")
 
     if args.output:
         from pathlib import Path as _P
-        _P(args.output).write_text(final_state.pr_comment or "No findings.", encoding="utf-8")
+
+        _P(args.output).write_text(
+            final_state.pr_comment or "No findings.", encoding="utf-8"
+        )
         c.print(f"[dim]Report saved →[/dim] [cyan]{args.output}[/cyan]")
 
 
 def _run_and_display(pipeline, initial_state, report_title: str) -> None:
     from src.cli.display import print_report, run_with_progress
+
     final_state = run_with_progress(pipeline, initial_state)
     print_report(final_state, title=report_title)
 
@@ -241,8 +300,9 @@ def _run_and_display(pipeline, initial_state, report_title: str) -> None:
 def cmd_init(args: argparse.Namespace) -> None:
     """Interactive first-time setup — writes API keys to ~/.sentinel/.env."""
     from pathlib import Path
+
     from rich.console import Console
-    from rich.prompt import Prompt, Confirm
+    from rich.prompt import Confirm, Prompt
 
     c = Console()
     c.print("\n[bold orange1]SENTINEL[/bold orange1]  setup wizard\n")
@@ -261,11 +321,17 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     def ask(key: str, prompt: str, default: str = "", secret: bool = False) -> str:
         cur = existing.get(key, default)
-        hint = f"[dim](current: {cur[:8]}…)[/dim]" if (cur and secret) else f"[dim](current: {cur})[/dim]" if cur else ""
+        hint = (
+            f"[dim](current: {cur[:8]}…)[/dim]"
+            if (cur and secret)
+            else f"[dim](current: {cur})[/dim]" if cur else ""
+        )
         val = Prompt.ask(f"  {prompt} {hint}", password=secret, default=cur)
         return val or cur
 
-    c.print("[bold]LLM provider[/bold]  (cascade = Groq → HuggingFace fallback, recommended)")
+    c.print(
+        "[bold]LLM provider[/bold]  (cascade = Groq → HuggingFace fallback, recommended)"
+    )
     provider = Prompt.ask(
         "  LLM_PROVIDER",
         choices=["cascade", "groq", "huggingface", "ollama", "anthropic"],
@@ -277,33 +343,56 @@ def cmd_init(args: argparse.Namespace) -> None:
         c.print("\n[bold]Groq[/bold]  free key at [cyan]console.groq.com[/cyan]")
         groq_key = ask("GROQ_API_KEY", "GROQ_API_KEY", secret=True)
     if provider in ("cascade", "huggingface"):
-        c.print("\n[bold]HuggingFace[/bold]  free token at [cyan]huggingface.co/settings/tokens[/cyan]")
+        c.print(
+            "\n[bold]HuggingFace[/bold]  free token at [cyan]huggingface.co/settings/tokens[/cyan]"
+        )
         hf_key = ask("HUGGINGFACE_API_KEY", "HUGGINGFACE_API_KEY", secret=True)
     if provider == "ollama":
-        ollama_url = ask("OLLAMA_BASE_URL", "OLLAMA_BASE_URL", default="http://localhost:11434")
+        ollama_url = ask(
+            "OLLAMA_BASE_URL", "OLLAMA_BASE_URL", default="http://localhost:11434"
+        )
     if provider == "anthropic":
         anthropic_key = ask("ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY", secret=True)
 
     c.print("\n[bold]GitHub[/bold]")
     webhook_secret = ask("GITHUB_WEBHOOK_SECRET", "GITHUB_WEBHOOK_SECRET", secret=True)
-    github_token   = ask("GITHUB_TOKEN",           "GITHUB_TOKEN (PAT with repo scope)", secret=True)
-    github_app_id  = ask("GITHUB_APP_ID",          "GITHUB_APP_ID (leave blank to use PAT)", default="")
+    github_token = ask(
+        "GITHUB_TOKEN", "GITHUB_TOKEN (PAT with repo scope)", secret=True
+    )
+    github_app_id = ask(
+        "GITHUB_APP_ID", "GITHUB_APP_ID (leave blank to use PAT)", default=""
+    )
 
     lines = [
         "# SENTINEL configuration — generated by sentinel init",
         f"LLM_PROVIDER={provider}",
     ]
-    if groq_key:      lines.append(f"GROQ_API_KEY={groq_key}")
-    if hf_key:        lines.append(f"HUGGINGFACE_API_KEY={hf_key}")
-    if ollama_url:    lines.append(f"OLLAMA_BASE_URL={ollama_url}")
-    if anthropic_key: lines.append(f"ANTHROPIC_API_KEY={anthropic_key}")
-    if webhook_secret: lines.append(f"GITHUB_WEBHOOK_SECRET={webhook_secret}")
-    if github_token:   lines.append(f"GITHUB_TOKEN={github_token}")
-    if github_app_id:  lines.append(f"GITHUB_APP_ID={github_app_id}")
+    if groq_key:
+        lines.append(f"GROQ_API_KEY={groq_key}")
+    if hf_key:
+        lines.append(f"HUGGINGFACE_API_KEY={hf_key}")
+    if ollama_url:
+        lines.append(f"OLLAMA_BASE_URL={ollama_url}")
+    if anthropic_key:
+        lines.append(f"ANTHROPIC_API_KEY={anthropic_key}")
+    if webhook_secret:
+        lines.append(f"GITHUB_WEBHOOK_SECRET={webhook_secret}")
+    if github_token:
+        lines.append(f"GITHUB_TOKEN={github_token}")
+    if github_app_id:
+        lines.append(f"GITHUB_APP_ID={github_app_id}")
 
     # Preserve any other keys from the existing file
-    skip = {"LLM_PROVIDER","GROQ_API_KEY","HUGGINGFACE_API_KEY","OLLAMA_BASE_URL",
-            "ANTHROPIC_API_KEY","GITHUB_WEBHOOK_SECRET","GITHUB_TOKEN","GITHUB_APP_ID"}
+    skip = {
+        "LLM_PROVIDER",
+        "GROQ_API_KEY",
+        "HUGGINGFACE_API_KEY",
+        "OLLAMA_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "GITHUB_WEBHOOK_SECRET",
+        "GITHUB_TOKEN",
+        "GITHUB_APP_ID",
+    }
     for k, v in existing.items():
         if k not in skip:
             lines.append(f"{k}={v}")
@@ -311,7 +400,9 @@ def cmd_init(args: argparse.Namespace) -> None:
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     c.print(f"\n[green]✓[/green]  Saved to [cyan]{env_file}[/cyan]")
     c.print("\nNext steps:")
-    c.print("  1. Build the sandbox image:  [cyan]docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .[/cyan]")
+    c.print(
+        "  1. Build the sandbox image:  [cyan]docker build -f docker/Dockerfile.sandbox -t sentinel-sandbox:latest .[/cyan]"
+    )
     c.print("  2. Set up your GitHub webhook:  [cyan]sentinel github-setup[/cyan]")
     c.print("  3. Start the server:  [cyan]sentinel serve[/cyan]\n")
 
@@ -323,28 +414,31 @@ def cmd_github_setup(args: argparse.Namespace) -> None:
 
     c = Console()
     c.print("\n[bold orange1]SENTINEL[/bold orange1]  GitHub webhook setup\n")
-    c.print(Panel(
-        "[bold]1.[/bold] Go to your GitHub repo → [cyan]Settings → Webhooks → Add webhook[/cyan]\n\n"
-        "[bold]2.[/bold] Fill in:\n"
-        "   Payload URL:   [cyan]http://<your-machine-ip>:8000/webhook/github[/cyan]\n"
-        "                  [dim](use ngrok for internet access — see below)[/dim]\n"
-        "   Content type:  [cyan]application/json[/cyan]\n"
-        "   Secret:        [cyan]the GITHUB_WEBHOOK_SECRET from your .env[/cyan]\n"
-        "   Events:        [cyan]Pull requests[/cyan]\n\n"
-        "[bold]3.[/bold] For local dev with a public URL, start an ngrok tunnel:\n"
-        "   [cyan]ngrok http 8000[/cyan]\n"
-        "   Then use the [cyan]https://xxxx.ngrok-free.app[/cyan] URL as your Payload URL.\n\n"
-        "[bold]4.[/bold] Start SENTINEL:\n"
-        "   [cyan]sentinel serve[/cyan]\n\n"
-        "[bold]5.[/bold] Open a PR on your repo — SENTINEL will post a review comment automatically.",
-        title="Setup steps",
-        border_style="orange1",
-    ))
+    c.print(
+        Panel(
+            "[bold]1.[/bold] Go to your GitHub repo → [cyan]Settings → Webhooks → Add webhook[/cyan]\n\n"
+            "[bold]2.[/bold] Fill in:\n"
+            "   Payload URL:   [cyan]http://<your-machine-ip>:8000/webhook/github[/cyan]\n"
+            "                  [dim](use ngrok for internet access — see below)[/dim]\n"
+            "   Content type:  [cyan]application/json[/cyan]\n"
+            "   Secret:        [cyan]the GITHUB_WEBHOOK_SECRET from your .env[/cyan]\n"
+            "   Events:        [cyan]Pull requests[/cyan]\n\n"
+            "[bold]3.[/bold] For local dev with a public URL, start an ngrok tunnel:\n"
+            "   [cyan]ngrok http 8000[/cyan]\n"
+            "   Then use the [cyan]https://xxxx.ngrok-free.app[/cyan] URL as your Payload URL.\n\n"
+            "[bold]4.[/bold] Start SENTINEL:\n"
+            "   [cyan]sentinel serve[/cyan]\n\n"
+            "[bold]5.[/bold] Open a PR on your repo — SENTINEL will post a review comment automatically.",
+            title="Setup steps",
+            border_style="orange1",
+        )
+    )
     c.print()
 
 
 def cmd_maintain(args: argparse.Namespace) -> None:
-    from src.agents.self_healing import consolidation, consistency, curator, drift_checker
+    from src.agents.self_healing import (consistency, consolidation, curator,
+                                         drift_checker)
     from src.core.logging import configure_logging
     from src.knowledge_base.store import KnowledgeBaseStore
 
@@ -358,42 +452,74 @@ def cmd_maintain(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SENTINEL — self-healing code quality pipeline")
+    parser = argparse.ArgumentParser(
+        description="SENTINEL — self-healing code quality pipeline"
+    )
     sub = parser.add_subparsers(dest="command")
 
     # serve
     p_serve = sub.add_parser("serve", help="Start the webhook server")
     p_serve.add_argument("--host", default="0.0.0.0")
     p_serve.add_argument("--port", type=int, default=8000)
-    p_serve.add_argument("--repo-root", default=".", help="Local path to the monitored repo")
+    p_serve.add_argument(
+        "--repo-root", default=".", help="Local path to the monitored repo"
+    )
     p_serve.set_defaults(func=cmd_serve)
 
     # run
     p_run = sub.add_parser("run", help="Run pipeline manually on a GitHub PR")
     p_run.add_argument("--repo", required=True, help="owner/repo")
     p_run.add_argument("--pr", type=int, required=True, help="PR number")
-    p_run.add_argument("--force-review", action="store_true", dest="force_review", help="Always run full review swarm regardless of risk level")
+    p_run.add_argument(
+        "--force-review",
+        action="store_true",
+        dest="force_review",
+        help="Always run full review swarm regardless of risk level",
+    )
     p_run.set_defaults(func=cmd_run)
 
     # scan
     p_scan = sub.add_parser("scan", help="Scan local code — no GitHub PR required")
-    p_scan.add_argument("--path", default=".", help="Directory to scan (default: current dir)")
-    p_scan.add_argument("--all", action="store_true", help="Scan every source file in the path (.py/.js/.ts/.jsx/.tsx) — ignores git diff")
-    p_scan.add_argument("--staged", action="store_true", help="Scan only staged git changes")
-    p_scan.add_argument("--branch", default=None, help="Diff against this branch (e.g. main)")
-    p_scan.add_argument("--force-review", action="store_true", dest="force_review", help="Always run full review swarm regardless of risk level")
-    p_scan.add_argument("--output", default=None, help="Save report to this file (e.g. report.md)")
+    p_scan.add_argument(
+        "--path", default=".", help="Directory to scan (default: current dir)"
+    )
+    p_scan.add_argument(
+        "--all",
+        action="store_true",
+        help="Scan every source file in the path (.py/.js/.ts/.jsx/.tsx) — ignores git diff",
+    )
+    p_scan.add_argument(
+        "--staged", action="store_true", help="Scan only staged git changes"
+    )
+    p_scan.add_argument(
+        "--branch", default=None, help="Diff against this branch (e.g. main)"
+    )
+    p_scan.add_argument(
+        "--force-review",
+        action="store_true",
+        dest="force_review",
+        help="Always run full review swarm regardless of risk level",
+    )
+    p_scan.add_argument(
+        "--output", default=None, help="Save report to this file (e.g. report.md)"
+    )
     p_scan.set_defaults(func=cmd_scan)
 
     # init
-    sub.add_parser("init", help="First-time setup wizard — saves API keys to ~/.sentinel/.env").set_defaults(func=cmd_init)
+    sub.add_parser(
+        "init", help="First-time setup wizard — saves API keys to ~/.sentinel/.env"
+    ).set_defaults(func=cmd_init)
 
     # github-setup
-    sub.add_parser("github-setup", help="Step-by-step GitHub webhook setup guide").set_defaults(func=cmd_github_setup)
+    sub.add_parser(
+        "github-setup", help="Step-by-step GitHub webhook setup guide"
+    ).set_defaults(func=cmd_github_setup)
 
     # maintain
     p_maintain = sub.add_parser("maintain", help="Run KB maintenance agents manually")
-    p_maintain.add_argument("--repo-root", default=".", help="Local path to the monitored repo")
+    p_maintain.add_argument(
+        "--repo-root", default=".", help="Local path to the monitored repo"
+    )
     p_maintain.set_defaults(func=cmd_maintain)
 
     args = parser.parse_args()

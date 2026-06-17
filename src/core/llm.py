@@ -27,6 +27,7 @@ def _get_token_cb():
     global _TOKEN_CB
     if _TOKEN_CB is None:
         from src.core.token_tracker import SentinelTokenCallback
+
         _TOKEN_CB = SentinelTokenCallback()
     return _TOKEN_CB
 
@@ -69,7 +70,9 @@ def _ollama_model(tier: str) -> BaseChatModel:
     except ImportError as e:
         raise ImportError("Run: pip install langchain-ollama") from e
 
-    model = settings.OLLAMA_MODEL_STRONG if tier == "strong" else settings.OLLAMA_MODEL_FAST
+    model = (
+        settings.OLLAMA_MODEL_STRONG if tier == "strong" else settings.OLLAMA_MODEL_FAST
+    )
     return ChatOllama(
         model=model,
         base_url=settings.OLLAMA_BASE_URL,
@@ -110,7 +113,9 @@ def _anthropic_model(tier: str) -> BaseChatModel:
             "Either set LLM_PROVIDER=ollama or LLM_PROVIDER=groq for a free option."
         )
 
-    model_id = settings.LLM_MODEL_STRONG if tier == "strong" else settings.LLM_MODEL_FAST
+    model_id = (
+        settings.LLM_MODEL_STRONG if tier == "strong" else settings.LLM_MODEL_FAST
+    )
     return ChatAnthropic(
         model=model_id,
         api_key=settings.ANTHROPIC_API_KEY,
@@ -171,9 +176,10 @@ def _cascade_model(tier: str) -> BaseChatModel:
     # Only fall back on transient errors — rate limits and server-side failures.
     # Do NOT catch ValueError/TypeError/JSONDecodeError here; those are logic bugs.
     try:
-        from groq import RateLimitError as GroqRateLimitError
-        from groq import APIStatusError as GroqAPIStatusError
         from groq import APIConnectionError as GroqAPIConnectionError
+        from groq import APIStatusError as GroqAPIStatusError
+        from groq import RateLimitError as GroqRateLimitError
+
         transient = (GroqRateLimitError, GroqAPIStatusError, GroqAPIConnectionError)
     except ImportError:
         transient = (Exception,)

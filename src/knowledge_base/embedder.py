@@ -22,6 +22,7 @@ _DEFAULT_MODEL = "all-MiniLM-L6-v2"
 @lru_cache(maxsize=1)
 def _get_model(model_name: str = _DEFAULT_MODEL):
     from sentence_transformers import SentenceTransformer
+
     log.info("loading_embedding_model", model=model_name)
     return SentenceTransformer(model_name)
 
@@ -36,7 +37,9 @@ class Embedder:
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         try:
             model = _get_model(self.model_name)
-            vecs: np.ndarray = model.encode(texts, normalize_embeddings=True, batch_size=32)
+            vecs: np.ndarray = model.encode(
+                texts, normalize_embeddings=True, batch_size=32
+            )
             return vecs.tolist()
         except Exception as exc:
             log.warning("embedding_failed_returning_zeros", error=str(exc))

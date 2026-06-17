@@ -17,13 +17,8 @@ from datetime import datetime
 
 from src.core.logging import get_logger
 from src.core.state import PipelineState, PipelineStatus
-from src.knowledge_base.models import (
-    BugFixPayload,
-    KBEntry,
-    KBEntryType,
-    ReviewOutcome,
-    ReviewOutcomePayload,
-)
+from src.knowledge_base.models import (BugFixPayload, KBEntry, KBEntryType,
+                                       ReviewOutcome, ReviewOutcomePayload)
 from src.knowledge_base.store import KnowledgeBaseStore
 
 log = get_logger(__name__)

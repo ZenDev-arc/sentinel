@@ -84,6 +84,7 @@ class KBSearchResult(BaseModel):
 
 class BugFixPayload(BaseModel):
     """Payload for KBEntryType.BUG_FIX entries."""
+
     failing_test: str
     root_cause: str
     patch: str
@@ -94,6 +95,7 @@ class BugFixPayload(BaseModel):
 
 class ReviewOutcomePayload(BaseModel):
     """Payload for KBEntryType.REVIEW_OUTCOME entries."""
+
     category: str
     severity: str
     suggestion: str
@@ -103,6 +105,7 @@ class ReviewOutcomePayload(BaseModel):
 
 class CodebasePatternPayload(BaseModel):
     """Payload for KBEntryType.CODEBASE_PATTERN entries."""
+
     pattern: str
     examples: list[str] = Field(default_factory=list)
     anti_examples: list[str] = Field(default_factory=list)

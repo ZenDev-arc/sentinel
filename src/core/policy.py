@@ -35,7 +35,9 @@ _SEV_ORDER: dict[str, int] = {
 }
 
 SeverityLevel = Literal["info", "low", "medium", "high", "critical"]
-CategoryName = Literal["security", "performance", "style", "architecture", "test", "bug"]
+CategoryName = Literal[
+    "security", "performance", "style", "architecture", "test", "bug"
+]
 
 
 class ReviewPolicy(BaseModel):
@@ -56,6 +58,7 @@ class RegressionPolicy(BaseModel):
 
 class SentinelPolicy(BaseModel):
     """Validated representation of a repo's sentinel.yaml."""
+
     version: int = 1
     review: ReviewPolicy = Field(default_factory=ReviewPolicy)
     gate: GatePolicy = Field(default_factory=GatePolicy)
@@ -64,7 +67,9 @@ class SentinelPolicy(BaseModel):
     @model_validator(mode="after")
     def _check_version(self) -> "SentinelPolicy":
         if self.version != 1:
-            raise ValueError(f"Unsupported sentinel.yaml version: {self.version}. Only version 1 is supported.")
+            raise ValueError(
+                f"Unsupported sentinel.yaml version: {self.version}. Only version 1 is supported."
+            )
         return self
 
     def severity_rank(self) -> int:
@@ -100,13 +105,20 @@ def load_policy(repo_full_name: str, head_sha: str) -> SentinelPolicy:
             raw = base64.b64decode(content_file.content).decode("utf-8")  # type: ignore[union-attr]
             data = yaml.safe_load(raw) or {}
             policy = SentinelPolicy.model_validate(data)
-            log.info("policy_loaded", repo=repo_full_name, file=filename, min_severity=policy.review.min_severity)
+            log.info(
+                "policy_loaded",
+                repo=repo_full_name,
+                file=filename,
+                min_severity=policy.review.min_severity,
+            )
             return policy
         except Exception as exc:
             # 404 from GitHub → GithubException with status 404; YAML/validation errors are ValueError
             msg = str(exc)
             if "404" not in msg and "Not Found" not in msg:
-                log.warning("policy_parse_failed", repo=repo_full_name, file=filename, error=msg)
+                log.warning(
+                    "policy_parse_failed", repo=repo_full_name, file=filename, error=msg
+                )
             # continue to next filename or fall through to defaults
 
     log.info("policy_using_defaults", repo=repo_full_name)

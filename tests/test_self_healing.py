@@ -97,6 +97,7 @@ class TestDriftChecker:
         test_file.write_text("def foo(): pass")
 
         import hashlib
+
         original_hash = hashlib.sha256(b"def foo(): pass").hexdigest()
 
         e = KBEntry(
@@ -127,6 +128,7 @@ class TestDriftChecker:
         test_file.write_bytes(content)
 
         import hashlib
+
         original_hash = hashlib.sha256(content).hexdigest()
 
         e = KBEntry(

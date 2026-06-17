@@ -82,7 +82,8 @@ def run(state: PipelineState) -> dict:
         return {}
 
     source_files = [
-        f for f in pr.files_changed
+        f
+        for f in pr.files_changed
         if re.search(r"\.(py|js|ts|go|java|rs)$", f)
         and not re.search(r"(test_|_test\.|spec\.)", f)
     ]
@@ -92,7 +93,9 @@ def run(state: PipelineState) -> dict:
         return {}
 
     if not _modules_interact(pr.diff, source_files):
-        log.info("integration_test_agent_skipped", reason="no cross-module imports detected")
+        log.info(
+            "integration_test_agent_skipped", reason="no cross-module imports detected"
+        )
         return {}
 
     log.info("integration_test_agent_start", modules=len(source_files))

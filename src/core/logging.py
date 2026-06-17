@@ -7,12 +7,11 @@ Structured logging setup.
 
 from __future__ import annotations
 
+import io
 import logging
 import sys
 from pathlib import Path
 from typing import Any
-
-import io
 
 import structlog
 from rich.console import Console
@@ -38,112 +37,250 @@ _current_phase: str | None = None
 
 _EVENT_CONFIG: dict[str, tuple[str | None, str, str, str]] = {
     # ── Server lifecycle ──────────────────────────────────────────────────────
-    "sentinel_api_startup":        (None,            "◈", "bold orange1",  "Sentinel listening on port {port}"),
-    "sentinel_api_shutdown":       (None,            "◈", "dim",           "Sentinel server shut down"),
-
+    "sentinel_api_startup": (
+        None,
+        "◈",
+        "bold orange1",
+        "Sentinel listening on port {port}",
+    ),
+    "sentinel_api_shutdown": (None, "◈", "dim", "Sentinel server shut down"),
     # ── Webhook ───────────────────────────────────────────────────────────────
-    "webhook_received":            (None,            "↓", "bold cyan",     "Webhook received  ({gh_event})  delivery {delivery}"),
-    "webhook_pr_action_ignored":   (None,            "·", "dim",           "PR action ignored"),
-    "webhook_ping_ok":             (None,            "·", "dim",           "Webhook ping OK"),
-    "webhook_secret_not_configured":(None,           "⚠", "yellow",        "Webhook secret not configured — requests are unverified"),
-    "webhook_signature_invalid":   (None,            "✗", "bold red",      "Webhook signature invalid — request rejected"),
-
+    "webhook_received": (
+        None,
+        "↓",
+        "bold cyan",
+        "Webhook received  ({gh_event})  delivery {delivery}",
+    ),
+    "webhook_pr_action_ignored": (None, "·", "dim", "PR action ignored"),
+    "webhook_ping_ok": (None, "·", "dim", "Webhook ping OK"),
+    "webhook_secret_not_configured": (
+        None,
+        "⚠",
+        "yellow",
+        "Webhook secret not configured — requests are unverified",
+    ),
+    "webhook_signature_invalid": (
+        None,
+        "✗",
+        "bold red",
+        "Webhook signature invalid — request rejected",
+    ),
     # ── Pipeline ──────────────────────────────────────────────────────────────
-    "pipeline_start":              (None,            "→", "bold white",    "{repo}  PR #{pr}"),
-    "pipeline_failed":             (None,            "✗", "bold red",      "Pipeline failed  PR #{pr}  {error}"),
-
+    "pipeline_start": (None, "→", "bold white", "{repo}  PR #{pr}"),
+    "pipeline_failed": (None, "✗", "bold red", "Pipeline failed  PR #{pr}  {error}"),
     # ── Risk scoring ──────────────────────────────────────────────────────────
-    "risk_scoring_start":          ("RISK SCORING",  "·", "dim",           "Scoring diff  PR #{pr}  ·  {repo}"),
-    "risk_score_heuristic_shortcut":(None,           "✓", "green",         "Risk: {risk_level}  (heuristic shortcut)"),
-    "risk_score_llm_failed":       (None,            "⚠", "yellow",        "LLM risk scoring failed — falling back to heuristics"),
-
+    "risk_scoring_start": (
+        "RISK SCORING",
+        "·",
+        "dim",
+        "Scoring diff  PR #{pr}  ·  {repo}",
+    ),
+    "risk_score_heuristic_shortcut": (
+        None,
+        "✓",
+        "green",
+        "Risk: {risk_level}  (heuristic shortcut)",
+    ),
+    "risk_score_llm_failed": (
+        None,
+        "⚠",
+        "yellow",
+        "LLM risk scoring failed — falling back to heuristics",
+    ),
     # ── Review swarm ──────────────────────────────────────────────────────────
-    "security_agent_start":        ("REVIEW SWARM",  "·", "dim",           "Security agent running..."),
-    "performance_agent_start":     (None,            "·", "dim",           "Performance agent running..."),
-    "style_agent_start":           (None,            "·", "dim",           "Style agent running..."),
-    "architecture_agent_start":    (None,            "·", "dim",           "Architecture agent running..."),
-    "security_agent_done":         (None,            "✓", "green",         "Security      {count} findings"),
-    "performance_agent_done":      (None,            "✓", "green",         "Performance   {count} findings"),
-    "style_agent_done":            (None,            "✓", "green",         "Style         {count} findings"),
-    "architecture_agent_done":     (None,            "✓", "green",         "Architecture  {count} findings"),
-    "security_agent_llm_failed":   (None,            "⚠", "yellow",        "Security agent LLM call failed"),
-    "performance_agent_llm_failed":(None,            "⚠", "yellow",        "Performance agent LLM call failed"),
-    "style_agent_llm_failed":      (None,            "⚠", "yellow",        "Style agent LLM call failed"),
-    "architecture_agent_llm_failed":(None,           "⚠", "yellow",        "Architecture agent LLM call failed"),
-    "lead_reviewer_start":         (None,            "·", "dim",           "Lead reviewer consolidating findings..."),
-    "lead_reviewer_llm_failed":    (None,            "⚠", "yellow",        "Lead reviewer LLM call failed"),
-
+    "security_agent_start": ("REVIEW SWARM", "·", "dim", "Security agent running..."),
+    "performance_agent_start": (None, "·", "dim", "Performance agent running..."),
+    "style_agent_start": (None, "·", "dim", "Style agent running..."),
+    "architecture_agent_start": (None, "·", "dim", "Architecture agent running..."),
+    "security_agent_done": (None, "✓", "green", "Security      {count} findings"),
+    "performance_agent_done": (None, "✓", "green", "Performance   {count} findings"),
+    "style_agent_done": (None, "✓", "green", "Style         {count} findings"),
+    "architecture_agent_done": (None, "✓", "green", "Architecture  {count} findings"),
+    "security_agent_llm_failed": (
+        None,
+        "⚠",
+        "yellow",
+        "Security agent LLM call failed",
+    ),
+    "performance_agent_llm_failed": (
+        None,
+        "⚠",
+        "yellow",
+        "Performance agent LLM call failed",
+    ),
+    "style_agent_llm_failed": (None, "⚠", "yellow", "Style agent LLM call failed"),
+    "architecture_agent_llm_failed": (
+        None,
+        "⚠",
+        "yellow",
+        "Architecture agent LLM call failed",
+    ),
+    "lead_reviewer_start": (
+        None,
+        "·",
+        "dim",
+        "Lead reviewer consolidating findings...",
+    ),
+    "lead_reviewer_llm_failed": (None, "⚠", "yellow", "Lead reviewer LLM call failed"),
     # ── Test generation ───────────────────────────────────────────────────────
-    "module_test_agent_start":     ("TEST GENERATION","·","dim",           "Generating tests for {files} changed files..."),
-    "test_generated":              (None,            "✓", "green",         "Generated tests for  {module}"),
-    "test_generation_failed":      (None,            "⚠", "yellow",        "Test generation failed  {module}  —  {error}"),
-    "module_test_agent_done":      (None,            "·", "dim",           "{generated} test file(s) generated"),
-    "module_test_agent_no_testable_files": (None,    "·", "dim",           "No testable source files changed"),
-    "integration_test_agent_start":(None,            "·", "dim",           "Integration test agent running..."),
-    "integration_test_generated":  (None,            "✓", "green",         "Integration test written"),
-    "integration_test_agent_skipped":(None,          "·", "dim",           "Integration tests skipped (no api / e2e dir found)"),
-
+    "module_test_agent_start": (
+        "TEST GENERATION",
+        "·",
+        "dim",
+        "Generating tests for {files} changed files...",
+    ),
+    "test_generated": (None, "✓", "green", "Generated tests for  {module}"),
+    "test_generation_failed": (
+        None,
+        "⚠",
+        "yellow",
+        "Test generation failed  {module}  —  {error}",
+    ),
+    "module_test_agent_done": (None, "·", "dim", "{generated} test file(s) generated"),
+    "module_test_agent_no_testable_files": (
+        None,
+        "·",
+        "dim",
+        "No testable source files changed",
+    ),
+    "integration_test_agent_start": (
+        None,
+        "·",
+        "dim",
+        "Integration test agent running...",
+    ),
+    "integration_test_generated": (None, "✓", "green", "Integration test written"),
+    "integration_test_agent_skipped": (
+        None,
+        "·",
+        "dim",
+        "Integration tests skipped (no api / e2e dir found)",
+    ),
     # ── Sandbox ───────────────────────────────────────────────────────────────
-    "sandbox_running_jest":        ("SANDBOX",       "·", "dim",           "Running Jest tests..."),
-    "sandbox_run_done":            (None,            "·", "cyan",          "Sandbox done  exit {exit_code}  ·  {passed} passed  ·  {failed} failed"),
-    "sandbox_skipped":             (None,            "·", "dim",           "Sandbox skipped  ({reason})"),
-    "sandbox_run_failed":          (None,            "✗", "bold red",      "Sandbox run failed  —  {error}"),
-    "sandbox_timeout":             (None,            "⚠", "yellow",        "Sandbox timed out"),
-    "sandbox_docker_unavailable":  (None,            "⚠", "yellow",        "Docker unavailable — sandbox disabled"),
-    "sandbox_jest_failed":         (None,            "⚠", "yellow",        "Jest run failed"),
-    "sandbox_jest_timeout":        (None,            "⚠", "yellow",        "Jest timed out"),
-    "sandbox_jest_no_tests_found": (None,            "·", "dim",           "Jest: no test files found"),
-    "sandbox_patch_run_failed":    (None,            "⚠", "yellow",        "Patch verification run failed"),
-    "sandbox_empty_patch":         (None,            "·", "dim",           "Skipping sandbox — patch is empty"),
-
+    "sandbox_running_jest": ("SANDBOX", "·", "dim", "Running Jest tests..."),
+    "sandbox_run_done": (
+        None,
+        "·",
+        "cyan",
+        "Sandbox done  exit {exit_code}  ·  {passed} passed  ·  {failed} failed",
+    ),
+    "sandbox_skipped": (None, "·", "dim", "Sandbox skipped  ({reason})"),
+    "sandbox_run_failed": (None, "✗", "bold red", "Sandbox run failed  —  {error}"),
+    "sandbox_timeout": (None, "⚠", "yellow", "Sandbox timed out"),
+    "sandbox_docker_unavailable": (
+        None,
+        "⚠",
+        "yellow",
+        "Docker unavailable — sandbox disabled",
+    ),
+    "sandbox_jest_failed": (None, "⚠", "yellow", "Jest run failed"),
+    "sandbox_jest_timeout": (None, "⚠", "yellow", "Jest timed out"),
+    "sandbox_jest_no_tests_found": (None, "·", "dim", "Jest: no test files found"),
+    "sandbox_patch_run_failed": (None, "⚠", "yellow", "Patch verification run failed"),
+    "sandbox_empty_patch": (None, "·", "dim", "Skipping sandbox — patch is empty"),
     # ── Bug squad ─────────────────────────────────────────────────────────────
-    "reproduction_agent_start":    ("BUG SQUAD",     "·", "dim",           "Reproducing {failing} failing test(s)..."),
-    "reproduction_agent_done":     (None,            "✓", "green",         "{reports} bug report(s) created"),
-    "root_cause_agent_start":      (None,            "·", "dim",           "Root-cause analysis ({reports} reports)..."),
-    "root_cause_agent_done":       (None,            "✓", "green",         "Root-cause analysis complete"),
-    "fix_proposer_start":          (None,            "·", "dim",           "Proposing fixes for {reports} report(s)..."),
-    "fix_proposer_done":           (None,            "✓", "green",         "Fix proposals complete"),
-    "fix_proposed":                (None,            "✓", "green",         "Fix proposed  (confidence {confidence})"),
-    "fix_verified":                (None,            "✓", "green",         "Fix verified by sandbox"),
-    "fix_rejected":                (None,            "⚠", "yellow",        "Fix rejected — tests still failing"),
-    "fix_proposal_failed":         (None,            "⚠", "yellow",        "Fix proposal failed"),
-
+    "reproduction_agent_start": (
+        "BUG SQUAD",
+        "·",
+        "dim",
+        "Reproducing {failing} failing test(s)...",
+    ),
+    "reproduction_agent_done": (None, "✓", "green", "{reports} bug report(s) created"),
+    "root_cause_agent_start": (
+        None,
+        "·",
+        "dim",
+        "Root-cause analysis ({reports} reports)...",
+    ),
+    "root_cause_agent_done": (None, "✓", "green", "Root-cause analysis complete"),
+    "fix_proposer_start": (
+        None,
+        "·",
+        "dim",
+        "Proposing fixes for {reports} report(s)...",
+    ),
+    "fix_proposer_done": (None, "✓", "green", "Fix proposals complete"),
+    "fix_proposed": (None, "✓", "green", "Fix proposed  (confidence {confidence})"),
+    "fix_verified": (None, "✓", "green", "Fix verified by sandbox"),
+    "fix_rejected": (None, "⚠", "yellow", "Fix rejected — tests still failing"),
+    "fix_proposal_failed": (None, "⚠", "yellow", "Fix proposal failed"),
     # ── Approval gate ─────────────────────────────────────────────────────────
-    "approval_gate_start":         ("APPROVAL GATE", "·", "dim",           "Evaluating {fixes} proposed fix(es)..."),
-    "fix_approved":                (None,            "✓", "green",         "Fix approved  →  awaiting merge"),
-    "fix_auto_merge":              (None,            "✓", "green",         "Fix auto-committed  —  {description}"),
-    "fix_committed":               (None,            "✓", "bold green",    "Committed  {sha}  on  {branch}"),
-    "fix_human_required":          (None,            "⚠", "yellow",        "Human review required  —  {description}"),
-    "fix_human_required_regression_block":(None,     "⚠", "yellow",        "Blocked — regression detected"),
-    "approved_fix_committed":      (None,            "✓", "bold green",    "Approved fix committed to repo"),
-    "approved_fix_commit_failed":  (None,            "✗", "bold red",      "Failed to commit approved fix"),
-
+    "approval_gate_start": (
+        "APPROVAL GATE",
+        "·",
+        "dim",
+        "Evaluating {fixes} proposed fix(es)...",
+    ),
+    "fix_approved": (None, "✓", "green", "Fix approved  →  awaiting merge"),
+    "fix_auto_merge": (None, "✓", "green", "Fix auto-committed  —  {description}"),
+    "fix_committed": (None, "✓", "bold green", "Committed  {sha}  on  {branch}"),
+    "fix_human_required": (
+        None,
+        "⚠",
+        "yellow",
+        "Human review required  —  {description}",
+    ),
+    "fix_human_required_regression_block": (
+        None,
+        "⚠",
+        "yellow",
+        "Blocked — regression detected",
+    ),
+    "approved_fix_committed": (
+        None,
+        "✓",
+        "bold green",
+        "Approved fix committed to repo",
+    ),
+    "approved_fix_commit_failed": (
+        None,
+        "✗",
+        "bold red",
+        "Failed to commit approved fix",
+    ),
     # ── Knowledge base ────────────────────────────────────────────────────────
-    "kb_store_connected":          (None,            "·", "dim",           "Knowledge base connected  ({collection})"),
-    "kb_store_unavailable":        (None,            "⚠", "yellow",        "Knowledge base unavailable"),
-    "kb_upserted":                 ("KNOWLEDGE BASE","✓", "green",         "KB updated  [{type}]  {title}"),
-    "kb_embed_failed":             (None,            "⚠", "yellow",        "Embedding failed — entry skipped"),
-    "loading_embedding_model":     (None,            "·", "dim",           "Loading embedding model  ({model})..."),
-    "embedding_failed_returning_zeros": (None,       "⚠", "yellow",        "Embedding model failed — zero vectors used"),
-
+    "kb_store_connected": (
+        None,
+        "·",
+        "dim",
+        "Knowledge base connected  ({collection})",
+    ),
+    "kb_store_unavailable": (None, "⚠", "yellow", "Knowledge base unavailable"),
+    "kb_upserted": ("KNOWLEDGE BASE", "✓", "green", "KB updated  [{type}]  {title}"),
+    "kb_embed_failed": (None, "⚠", "yellow", "Embedding failed — entry skipped"),
+    "loading_embedding_model": (
+        None,
+        "·",
+        "dim",
+        "Loading embedding model  ({model})...",
+    ),
+    "embedding_failed_returning_zeros": (
+        None,
+        "⚠",
+        "yellow",
+        "Embedding model failed — zero vectors used",
+    ),
     # ── Self-healing maintenance ───────────────────────────────────────────────
-    "curator_agent_start":         ("MAINTENANCE",   "·", "dim",           "Curator running..."),
-    "curator_agent_done":          (None,            "✓", "green",         "Curator complete"),
-    "drift_checker_start":         (None,            "·", "dim",           "Drift checker running..."),
-    "drift_checker_done":          (None,            "✓", "green",         "Drift checker complete"),
-    "consistency_agent_start":     (None,            "·", "dim",           "Consistency agent running..."),
-    "consistency_agent_done":      (None,            "✓", "green",         "Consistency check complete"),
-    "consolidation_agent_start":   (None,            "·", "dim",           "Consolidation agent running..."),
-    "consolidation_agent_done":    (None,            "✓", "green",         "Consolidation complete"),
-    "manual_maintenance_done":     (None,            "✓", "green",         "Manual maintenance complete"),
-
+    "curator_agent_start": ("MAINTENANCE", "·", "dim", "Curator running..."),
+    "curator_agent_done": (None, "✓", "green", "Curator complete"),
+    "drift_checker_start": (None, "·", "dim", "Drift checker running..."),
+    "drift_checker_done": (None, "✓", "green", "Drift checker complete"),
+    "consistency_agent_start": (None, "·", "dim", "Consistency agent running..."),
+    "consistency_agent_done": (None, "✓", "green", "Consistency check complete"),
+    "consolidation_agent_start": (None, "·", "dim", "Consolidation agent running..."),
+    "consolidation_agent_done": (None, "✓", "green", "Consolidation complete"),
+    "manual_maintenance_done": (None, "✓", "green", "Manual maintenance complete"),
     # ── GitHub integration ────────────────────────────────────────────────────
-    "pr_comment_posted":           (None,            "✓", "bold green",    "Review comment posted  →  {url}"),
-
+    "pr_comment_posted": (None, "✓", "bold green", "Review comment posted  →  {url}"),
     # ── Misc warnings / errors ────────────────────────────────────────────────
-    "agent_timeout":               (None,            "⚠", "yellow",        "Agent timed out  ({agent})  limit={timeout}s"),
-    "policy_load_error":           (None,            "⚠", "yellow",        "Policy load error"),
-    "policy_using_defaults":       (None,            "·", "dim",           "Using default policy"),
+    "agent_timeout": (
+        None,
+        "⚠",
+        "yellow",
+        "Agent timed out  ({agent})  limit={timeout}s",
+    ),
+    "policy_load_error": (None, "⚠", "yellow", "Policy load error"),
+    "policy_using_defaults": (None, "·", "dim", "Using default policy"),
 }
 
 

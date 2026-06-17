@@ -89,8 +89,10 @@ def run(kb: KnowledgeBaseStore, repo: str | None = None) -> dict:
             n_results=10,
         )
         cluster_members = {
-            h.entry.id for h in hits
-            if h.similarity >= _CLUSTER_SIMILARITY and h.entry.id != entry.id
+            h.entry.id
+            for h in hits
+            if h.similarity >= _CLUSTER_SIMILARITY
+            and h.entry.id != entry.id
             and h.entry.id not in assigned
         }
         if len(cluster_members) >= _MIN_CLUSTER_SIZE - 1:
@@ -116,8 +118,12 @@ def run(kb: KnowledgeBaseStore, repo: str | None = None) -> dict:
         repo_name = members[0].repo
 
         canonical = KBEntry(
-            type=KBEntryType(canonical_data.get("type", KBEntryType.CODEBASE_PATTERN.value)),
-            title=canonical_data.get("title", f"Generalised pattern (cluster {rep_id[:8]})"),
+            type=KBEntryType(
+                canonical_data.get("type", KBEntryType.CODEBASE_PATTERN.value)
+            ),
+            title=canonical_data.get(
+                "title", f"Generalised pattern (cluster {rep_id[:8]})"
+            ),
             description=canonical_data.get("description", ""),
             payload=canonical_data.get("payload", {}),
             repo=repo_name,
@@ -127,11 +133,13 @@ def run(kb: KnowledgeBaseStore, repo: str | None = None) -> dict:
 
         # Mark all cluster members as superseded
         for member in members:
-            updated = member.model_copy(update={
-                "superseded_by": canonical.id,
-                "archived": True,
-                "invalidation_reason": f"Consolidated into canonical entry {canonical.id}",
-            })
+            updated = member.model_copy(
+                update={
+                    "superseded_by": canonical.id,
+                    "archived": True,
+                    "invalidation_reason": f"Consolidated into canonical entry {canonical.id}",
+                }
+            )
             kb.upsert(updated)
             consolidated_count += 1
 

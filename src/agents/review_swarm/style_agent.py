@@ -22,7 +22,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from src.core.llm import get_llm
 from src.core.logging import get_logger
-from src.core.state import FindingCategory, FindingSeverity, PipelineState, ReviewFinding
+from src.core.state import (FindingCategory, FindingSeverity, PipelineState,
+                            ReviewFinding)
 from src.knowledge_base.models import KBEntryType
 from src.knowledge_base.store import KnowledgeBaseStore
 
@@ -120,7 +121,11 @@ def run(state: PipelineState, kb: KnowledgeBaseStore) -> dict:
     for item in raw:
         try:
             sev_str = item.get("severity", "low").lower()
-            sev = FindingSeverity(sev_str) if sev_str in FindingSeverity._value2member_map_ else FindingSeverity.LOW
+            sev = (
+                FindingSeverity(sev_str)
+                if sev_str in FindingSeverity._value2member_map_
+                else FindingSeverity.LOW
+            )
             findings.append(
                 ReviewFinding(
                     category=FindingCategory.STYLE,

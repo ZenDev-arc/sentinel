@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from src.core.logging import get_logger
-from src.core.state import ReviewFinding, RegressionMatch
+from src.core.state import RegressionMatch, ReviewFinding
 from src.knowledge_base.models import KBEntryType
 from src.knowledge_base.store import KnowledgeBaseStore
 
@@ -57,7 +57,9 @@ def detect_regressions(
                 entry_type=KBEntryType.BUG_FIX,
             )
         except Exception as exc:
-            log.warning("regression_search_failed", finding_id=finding.id, error=str(exc))
+            log.warning(
+                "regression_search_failed", finding_id=finding.id, error=str(exc)
+            )
             updated.append(finding)
             continue
 
@@ -95,10 +97,14 @@ def detect_regressions(
 
         if match:
             regression_count += 1
-            updated.append(finding.model_copy(update={
-                "is_regression": True,
-                "regression": match,
-            }))
+            updated.append(
+                finding.model_copy(
+                    update={
+                        "is_regression": True,
+                        "regression": match,
+                    }
+                )
+            )
         else:
             updated.append(finding)
 

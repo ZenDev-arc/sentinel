@@ -24,7 +24,8 @@ from io import BytesIO
 from src.core.logging import get_logger
 from src.core.project_utils import detect_project_type
 from src.core.sandbox import Sandbox
-from src.core.state import BugReport, FixClassification, PipelineState, ProposedFix
+from src.core.state import (BugReport, FixClassification, PipelineState,
+                            ProposedFix)
 
 log = get_logger(__name__)
 
@@ -45,7 +46,9 @@ def _extract_file(archive_bytes: bytes, rel_path: str) -> str | None:
     return None
 
 
-def _apply_text_fix(original: str, fix_original: str, fix_replacement: str) -> str | None:
+def _apply_text_fix(
+    original: str, fix_original: str, fix_replacement: str
+) -> str | None:
     """Replace fix_original with fix_replacement inside original. Returns None if not found."""
     if fix_original in original:
         return original.replace(fix_original, fix_replacement, 1)
@@ -64,8 +67,10 @@ def _make_unified_diff(original: str, fixed: str, filename: str) -> str:
     orig_lines = original.splitlines(keepends=True)
     fixed_lines = fixed.splitlines(keepends=True)
     diff = difflib.unified_diff(
-        orig_lines, fixed_lines,
-        fromfile=f"a/{filename}", tofile=f"b/{filename}",
+        orig_lines,
+        fixed_lines,
+        fromfile=f"a/{filename}",
+        tofile=f"b/{filename}",
         lineterm="",
     )
     return "".join(diff)
@@ -76,7 +81,10 @@ def _make_test_command(failing_test: str, project_type: str) -> tuple[str, bool]
     if project_type == "javascript":
         # Jest: run only the specific failing test by name pattern
         safe = failing_test.replace("›", ">").strip()
-        return f'jest --no-coverage --forceExit --testEnvironment node -t {shlex.quote(safe)}', True
+        return (
+            f"jest --no-coverage --forceExit --testEnvironment node -t {shlex.quote(safe)}",
+            True,
+        )
     return f"pytest {shlex.quote(failing_test)} -x --tb=short -q", False
 
 
@@ -88,7 +96,8 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
         return {
             "bug_reports": state.bug_reports,
             "proposed_fixes": state.proposed_fixes,
-            "errors": state.errors + ["Verification skipped: repo_archive missing from state"],
+            "errors": state.errors
+            + ["Verification skipped: repo_archive missing from state"],
         }
 
     updated_reports: list[BugReport] = []
@@ -124,11 +133,17 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
             # Apply text replacement
             fixed_content = _apply_text_fix(original_content, orig_code, fixed_code)
             if fixed_content is None:
-                log.warning("patch_text_not_found", file=file_path, snippet=orig_code[:80])
+                log.warning(
+                    "patch_text_not_found", file=file_path, snippet=orig_code[:80]
+                )
                 continue
 
-            log.info("testing_fix", test=report.failing_test, file=file_path,
-                     confidence=candidate.get("confidence"))
+            log.info(
+                "testing_fix",
+                test=report.failing_test,
+                file=file_path,
+                confidence=candidate.get("confidence"),
+            )
 
             test_cmd, is_jest = _make_test_command(report.failing_test, project_type)
             if is_jest:
@@ -146,13 +161,20 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
             if result.exit_code == 0 and result.failed == 0 and result.passed > 0:
                 selected_patch = candidate
                 # Build a clean unified diff for storage
-                candidate["patch"] = _make_unified_diff(original_content, fixed_content, file_path)
+                candidate["patch"] = _make_unified_diff(
+                    original_content, fixed_content, file_path
+                )
                 log.info("fix_verified", test=report.failing_test, file=file_path)
                 break
             else:
-                log.info("fix_rejected", test=report.failing_test,
-                         exit_code=result.exit_code, failed=result.failed,
-                         passed=result.passed, stdout=result.stdout[:300])
+                log.info(
+                    "fix_rejected",
+                    test=report.failing_test,
+                    exit_code=result.exit_code,
+                    failed=result.failed,
+                    passed=result.passed,
+                    stdout=result.stdout[:300],
+                )
 
         updated_report = report.model_copy(
             update={
@@ -164,7 +186,14 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
 
         if selected_patch:
             affected = selected_patch.get("affected_files", report.affected_files)
-            sensitive_keywords = {"auth", "payment", "billing", "password", "secret", "token"}
+            sensitive_keywords = {
+                "auth",
+                "payment",
+                "billing",
+                "password",
+                "secret",
+                "token",
+            }
             is_sensitive = any(
                 kw in f.lower() for f in affected for kw in sensitive_keywords
             )
@@ -175,7 +204,9 @@ def run(state: PipelineState, sandbox: Sandbox) -> dict:
             )
             proposed_fixes.append(
                 ProposedFix(
-                    description=selected_patch.get("description", f"Fix for {report.failing_test}"),
+                    description=selected_patch.get(
+                        "description", f"Fix for {report.failing_test}"
+                    ),
                     patch=selected_patch.get("patch", ""),
                     affected_files=affected,
                     classification=classification,

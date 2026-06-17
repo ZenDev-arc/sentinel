@@ -152,7 +152,11 @@ class TestEmbedder:
 
     def test_embed_batch(self):
         embedder = Embedder()
-        texts = ["security vulnerability", "performance N+1 query", "style naming convention"]
+        texts = [
+            "security vulnerability",
+            "performance N+1 query",
+            "style naming convention",
+        ]
         vecs = embedder.embed_batch(texts)
         assert len(vecs) == 3
         assert all(len(v) == len(vecs[0]) for v in vecs)
@@ -161,7 +165,10 @@ class TestEmbedder:
         text = Embedder.build_kb_text(
             title="Fix null pointer",
             description="User was not checked before access",
-            payload={"root_cause": "Missing guard", "patch": "if user is None: return None"},
+            payload={
+                "root_cause": "Missing guard",
+                "patch": "if user is None: return None",
+            },
         )
         assert "Fix null pointer" in text
         assert "Missing guard" in text

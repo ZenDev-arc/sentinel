@@ -38,6 +38,7 @@ def _write(path: Path, data: list[dict]) -> None:
 
 # ── Pipeline runs ──────────────────────────────────────────────────────────────
 
+
 def save_run(run: dict) -> None:
     with _lock:
         runs = _read(_RUNS_FILE)
@@ -60,6 +61,7 @@ def get_run(run_id: str) -> Optional[dict]:
 
 
 # ── Maintenance records ────────────────────────────────────────────────────────
+
 
 def save_maintenance(record: dict) -> None:
     with _lock:
@@ -107,6 +109,7 @@ def consume_reverts() -> list[str]:
 
 # ── Pending approvals ──────────────────────────────────────────────────────────
 
+
 def save_approval(approval: dict) -> None:
     approval.setdefault("id", str(uuid.uuid4()))
     approval.setdefault("created_at", datetime.utcnow().isoformat())
@@ -132,6 +135,7 @@ def list_approvals(status: Optional[str] = "pending") -> list[dict]:
 
 
 # ── Cross-PR patterns ──────────────────────────────────────────────────────────
+
 
 def save_patterns(patterns: list[dict]) -> None:
     with _lock:

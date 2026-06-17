@@ -22,13 +22,8 @@ from __future__ import annotations
 from src.core.config import settings
 from src.core.logging import get_logger
 from src.core.regression_detector import detect_regressions
-from src.core.state import (
-    FixClassification,
-    FindingSeverity,
-    PipelineState,
-    ProposedFix,
-    RiskLevel,
-)
+from src.core.state import (FindingSeverity, FixClassification, PipelineState,
+                            ProposedFix, RiskLevel)
 from src.knowledge_base.store import KnowledgeBaseStore
 
 log = get_logger(__name__)
@@ -40,6 +35,7 @@ _MAX_AUTO_PATCH_LINES = 30
 def _get_policy(state: PipelineState):
     """Return the active SentinelPolicy, creating defaults if none was loaded."""
     from src.core.policy import SentinelPolicy
+
     if state.policy is None:
         return SentinelPolicy()
     return state.policy
@@ -62,8 +58,9 @@ def _is_auto_mergeable(fix: ProposedFix, state: PipelineState) -> bool:
     # Patch size check — policy can override the default limit
     max_lines = policy.gate.max_auto_patch_lines
     changed_lines = sum(
-        1 for line in fix.patch.splitlines() if line.startswith(("+", "-"))
-        and not line.startswith(("+++", "---"))
+        1
+        for line in fix.patch.splitlines()
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
     )
     if changed_lines > max_lines:
         return False
@@ -106,7 +103,9 @@ def _build_pr_comment(state: PipelineState) -> str:
     risk = state.risk
     if risk:
         emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk.level.value, "⚪")
-        lines.append(f"**Risk Level:** {emoji} {risk.level.value.upper()} (score: {risk.score:.2f})\n")
+        lines.append(
+            f"**Risk Level:** {emoji} {risk.level.value.upper()} (score: {risk.score:.2f})\n"
+        )
         if risk.reasons:
             lines.append("**Risk reasons:** " + "; ".join(risk.reasons[:3]) + "\n")
 
@@ -117,7 +116,13 @@ def _build_pr_comment(state: PipelineState) -> str:
         by_sev = {}
         for f in findings:
             by_sev.setdefault(f.severity, []).append(f)
-        for sev in [FindingSeverity.CRITICAL, FindingSeverity.HIGH, FindingSeverity.MEDIUM, FindingSeverity.LOW, FindingSeverity.INFO]:
+        for sev in [
+            FindingSeverity.CRITICAL,
+            FindingSeverity.HIGH,
+            FindingSeverity.MEDIUM,
+            FindingSeverity.LOW,
+            FindingSeverity.INFO,
+        ]:
             group = by_sev.get(sev, [])
             if not group:
                 continue
@@ -189,7 +194,8 @@ def run(state: PipelineState, kb: KnowledgeBaseStore | None = None) -> dict:
     skip_cats = set(policy.review.skip_categories)
     if policy.review.min_severity != "info" or skip_cats:
         filtered = [
-            f for f in state.consolidated_findings
+            f
+            for f in state.consolidated_findings
             if not policy.is_below_min_severity(f.severity.value)
             and f.category.value not in skip_cats
         ]
@@ -212,22 +218,31 @@ def run(state: PipelineState, kb: KnowledgeBaseStore | None = None) -> dict:
 
     for fix in state.proposed_fixes:
         if not force_human and _is_auto_mergeable(fix, state):
-            classified = fix.model_copy(update={"classification": FixClassification.AUTO_MERGE})
+            classified = fix.model_copy(
+                update={"classification": FixClassification.AUTO_MERGE}
+            )
             auto_fixes.append(classified)
             log.info("fix_auto_merge", description=fix.description[:60])
         else:
-            classified = fix.model_copy(update={"classification": FixClassification.HUMAN_REQUIRED})
+            classified = fix.model_copy(
+                update={"classification": FixClassification.HUMAN_REQUIRED}
+            )
             human_fixes.append(classified)
             if force_human:
-                log.info("fix_human_required_regression_block", description=fix.description[:60])
+                log.info(
+                    "fix_human_required_regression_block",
+                    description=fix.description[:60],
+                )
             else:
                 log.info("fix_human_required", description=fix.description[:60])
 
     pr_comment = _build_pr_comment(
-        state.model_copy(update={
-            "auto_applied_fixes": auto_fixes,
-            "pending_human_fixes": human_fixes,
-        })
+        state.model_copy(
+            update={
+                "auto_applied_fixes": auto_fixes,
+                "pending_human_fixes": human_fixes,
+            }
+        )
     )
 
     log.info(

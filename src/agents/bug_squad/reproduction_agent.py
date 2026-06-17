@@ -68,7 +68,9 @@ Return only the JSON array. Do NOT wrap in markdown.
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=30))
-def _isolate_batch(failing_tests: list[str], stdout: str, stderr: str, diff: str) -> list[dict]:
+def _isolate_batch(
+    failing_tests: list[str], stdout: str, stderr: str, diff: str
+) -> list[dict]:
     llm = get_llm("fast")
     prompt = (
         f"Failing tests: {json.dumps(failing_tests)}\n\n"
@@ -88,9 +90,7 @@ def _isolate_batch(failing_tests: list[str], stdout: str, stderr: str, diff: str
 
 def run(state: PipelineState) -> dict:
     all_failing: list[tuple[str, TestResult]] = [
-        (test, result)
-        for result in state.test_results
-        for test in result.failing_tests
+        (test, result) for result in state.test_results for test in result.failing_tests
     ]
     log.info("reproduction_agent_start", failing=len(all_failing))
 
@@ -100,6 +100,7 @@ def run(state: PipelineState) -> dict:
 
     # Group by TestResult so we can batch per result set
     from itertools import groupby
+
     results_map: dict[int, TestResult] = {}
     for test, result in all_failing:
         results_map.setdefault(id(result), result)
@@ -116,19 +117,23 @@ def run(state: PipelineState) -> dict:
             by_name = {d.get("failing_test", ""): d for d in batch}
             for test_name in failing_in_result:
                 data = by_name.get(test_name) or (batch[0] if batch else {})
-                bug_reports.append(BugReport(
-                    failing_test=test_name,
-                    minimal_repro=data.get("minimal_repro", f"# Test: {test_name}"),
-                    affected_files=data.get("affected_files", [result.module]),
-                ))
+                bug_reports.append(
+                    BugReport(
+                        failing_test=test_name,
+                        minimal_repro=data.get("minimal_repro", f"# Test: {test_name}"),
+                        affected_files=data.get("affected_files", [result.module]),
+                    )
+                )
         except Exception as exc:
             log.warning("reproduction_batch_failed", error=str(exc))
             for test_name in failing_in_result:
-                bug_reports.append(BugReport(
-                    failing_test=test_name,
-                    minimal_repro=f"# Auto-reproduction failed: {exc}",
-                    affected_files=[result.module],
-                ))
+                bug_reports.append(
+                    BugReport(
+                        failing_test=test_name,
+                        minimal_repro=f"# Auto-reproduction failed: {exc}",
+                        affected_files=[result.module],
+                    )
+                )
 
     log.info("reproduction_agent_done", reports=len(bug_reports))
     return {"bug_reports": bug_reports}

@@ -61,7 +61,11 @@ def run(kb: KnowledgeBaseStore, reverted_commits: list[str] | None = None) -> di
                 reason=f"Rejected {entry.rejection_count} times by humans",
             )
             invalidated += 1
-            log.info("entry_invalidated_rejections", entry_id=entry.id, count=entry.rejection_count)
+            log.info(
+                "entry_invalidated_rejections",
+                entry_id=entry.id,
+                count=entry.rejection_count,
+            )
             continue
 
         # 3. Confidence decay

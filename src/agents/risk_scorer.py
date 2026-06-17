@@ -122,14 +122,26 @@ def run(state: PipelineState) -> dict:
     # For very small, non-sensitive PRs skip the LLM to save tokens.
     # But never shortcut if the diff content contains security red-flags.
     _CONTENT_RED_FLAGS = (
-        "shell=true", "shell = true",
-        "password", "secret", "api_key", "apikey", "token",
-        "execute(", "cursor.execute", "subprocess",
-        "eval(", "exec(",
+        "shell=true",
+        "shell = true",
+        "password",
+        "secret",
+        "api_key",
+        "apikey",
+        "token",
+        "execute(",
+        "cursor.execute",
+        "subprocess",
+        "eval(",
+        "exec(",
     )
     diff_lower = (pr.diff or "").lower()
     content_is_sensitive = any(flag in diff_lower for flag in _CONTENT_RED_FLAGS)
-    if heuristic_score == 0.0 and pr.additions + pr.deletions < 30 and not content_is_sensitive:
+    if (
+        heuristic_score == 0.0
+        and pr.additions + pr.deletions < 30
+        and not content_is_sensitive
+    ):
         level = RiskLevel.LOW
         risk = RiskScore(
             level=level,

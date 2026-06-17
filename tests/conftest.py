@@ -20,6 +20,7 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 def reset_lru_caches():
     """Clear LRU-cached singletons between tests."""
     from src.core.llm import get_llm
+
     get_llm.cache_clear()
     yield
     get_llm.cache_clear()
