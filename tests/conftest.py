@@ -19,8 +19,8 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 @pytest.fixture(autouse=True)
 def reset_lru_caches():
     """Clear LRU-cached singletons between tests."""
-    from src.core.llm import get_llm
+    from src.knowledge_base.embedder import _get_model
 
-    get_llm.cache_clear()
+    _get_model.cache_clear()
     yield
-    get_llm.cache_clear()
+    _get_model.cache_clear()
