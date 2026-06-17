@@ -33,6 +33,10 @@ def _get_local_model(model_name: str = _DEFAULT_MODEL_SHORT):
     return SentenceTransformer(model_name)
 
 
+# Cached flag: once HF API is confirmed unreachable, skip it for the process lifetime
+_api_unreachable: bool = False
+
+
 def _embed_via_api(texts: list[str]) -> list[list[float]]:
     import httpx
     from src.core.config import settings
@@ -65,15 +69,25 @@ class Embedder:
         return self.embed_batch([text])[0]
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        if _use_api():
-            # Call HF Inference API in chunks to stay within rate limits
-            results = []
-            for i in range(0, len(texts), 32):
-                results.extend(_embed_via_api(texts[i:i + 32]))
-            return results
-        model = _get_local_model(self.model_name)
-        vecs: np.ndarray = model.encode(texts, normalize_embeddings=True, batch_size=32)
-        return vecs.tolist()
+        global _api_unreachable
+        if _use_api() and not _api_unreachable:
+            try:
+                results = []
+                for i in range(0, len(texts), 32):
+                    results.extend(_embed_via_api(texts[i:i + 32]))
+                return results
+            except Exception as exc:
+                _api_unreachable = True
+                log.warning("hf_api_unreachable_falling_back_to_local", error=str(exc))
+        # Fall back to local sentence-transformers
+        try:
+            model = _get_local_model(self.model_name)
+            vecs: np.ndarray = model.encode(texts, normalize_embeddings=True, batch_size=32)
+            return vecs.tolist()
+        except Exception:
+            # No embedding backend available — return zero vectors
+            dim = 384  # all-MiniLM-L6-v2 dimension
+            return [[0.0] * dim for _ in texts]
 
     @staticmethod
     def build_kb_text(title: str, description: str, payload: dict) -> str:

@@ -51,6 +51,33 @@ Return only the JSON object. Do NOT wrap in markdown.
 """
 
 
+def _extract_json(text: str) -> dict:
+    """Extract the first JSON object from LLM output robustly."""
+    text = text.strip()
+    # Strip markdown code fences
+    text = re.sub(r"^```[a-z]*\n?", "", text)
+    text = re.sub(r"\n?```$", "", text)
+    text = text.strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Find the outermost {...} block
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("No JSON object found in response")
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(text[start:i + 1])
+    raise ValueError("Unterminated JSON object in response")
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def _generate_tests(module_diff: str, module_path: str, kb_context: str) -> dict:
     llm = get_llm("strong")
@@ -61,10 +88,7 @@ def _generate_tests(module_diff: str, module_path: str, kb_context: str) -> dict
     response = llm.invoke(
         [SystemMessage(content=_SYSTEM), HumanMessage(content=prompt)]
     )
-    text = response.content.strip()
-    text = re.sub(r"^```[a-z]*\n?", "", text)
-    text = re.sub(r"\n?```$", "", text)
-    return json.loads(text)
+    return _extract_json(response.content)
 
 
 def _extract_module_diff(full_diff: str, file_path: str) -> str:
