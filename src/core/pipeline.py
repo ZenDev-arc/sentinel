@@ -200,7 +200,7 @@ def node_run_tests(state: PipelineState) -> dict:
             log.warning("archive_failed", error=str(exc))
             return {"test_results": [], "errors": state.errors + [f"Sandbox archive failed: {exc}"]}
 
-    # Skip sandbox when Docker is unavailable (e.g. Render free tier)
+    # Skip sandbox when Docker is unavailable on the host
     import os
     if os.environ.get("DISABLE_SANDBOX", "").lower() in ("1", "true", "yes"):
         log.info("sandbox_skipped", reason="DISABLE_SANDBOX=true")

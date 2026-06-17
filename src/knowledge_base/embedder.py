@@ -1,9 +1,9 @@
 """
 Text embedder for the knowledge base.
 
-When HUGGINGFACE_API_KEY is set (cloud/Render), uses the HF Inference API
-so PyTorch never loads — keeps RAM under 512 MB on free-tier hosts.
-Falls back to local sentence-transformers when no API key is present.
+When HUGGINGFACE_API_KEY is set, uses the HF Inference API so PyTorch
+never loads on the host. Falls back to local sentence-transformers when
+no API key is present.
 """
 
 from __future__ import annotations

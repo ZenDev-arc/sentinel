@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     # ── GitHub ────────────────────────────────────────────────────────────────
     GITHUB_APP_ID: Optional[str] = None
     GITHUB_APP_PRIVATE_KEY_PATH: str = "./keys/github-app.pem"
-    # Set this directly to the PEM content (preferred on cloud hosts like Render/Railway
-    # where you can't mount a file). Takes precedence over GITHUB_APP_PRIVATE_KEY_PATH.
+    # Set this directly to the PEM content (preferred on cloud hosts where you can't
+    # mount a file). Takes precedence over GITHUB_APP_PRIVATE_KEY_PATH.
     GITHUB_APP_PRIVATE_KEY: Optional[str] = None
     GITHUB_WEBHOOK_SECRET: str = ""
     GITHUB_TOKEN: Optional[str] = None
