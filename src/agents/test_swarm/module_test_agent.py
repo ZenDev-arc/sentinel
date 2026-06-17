@@ -38,16 +38,14 @@ Rules:
 - Tests must be immediately runnable (correct imports, fixtures defined).
 - Keep each test function focused on one behaviour.
 
-Return a JSON object:
-{
-  "module": "<module path, e.g. src/auth/service.py>",
-  "language": "python" | "javascript" | "typescript" | "go" | ...,
-  "file_path": "<suggested test file path>",
-  "description": "<one sentence on what this test file covers>",
-  "content": "<complete test file content as a string>"
-}
+Respond in TWO parts separated by the exact line ---CODE---
 
-Return only the JSON object. Do NOT wrap in markdown.
+Part 1: a JSON object (no markdown fences):
+{"module": "<module path>", "language": "python", "file_path": "<test file path>", "description": "<one sentence>"}
+
+---CODE---
+
+Part 2: the complete test file content (raw source, no fences).
 """
 
 
@@ -88,7 +86,14 @@ def _generate_tests(module_diff: str, module_path: str, kb_context: str) -> dict
     response = llm.invoke(
         [SystemMessage(content=_SYSTEM), HumanMessage(content=prompt)]
     )
-    return _extract_json(response.content)
+    text = response.content.strip()
+    if "---CODE---" in text:
+        meta_part, code_part = text.split("---CODE---", 1)
+        data = _extract_json(meta_part)
+        data["content"] = code_part.strip()
+        return data
+    # Fallback: whole response as JSON (old format)
+    return _extract_json(text)
 
 
 def _extract_module_diff(full_diff: str, file_path: str) -> str:
