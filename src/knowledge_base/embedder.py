@@ -1,7 +1,9 @@
 """
-SBERT-based text embedder for the knowledge base.
-Uses sentence-transformers (local, free, no API calls).
-Model is downloaded once and cached in ~/.cache/huggingface/.
+Text embedder for the knowledge base.
+
+When HUGGINGFACE_API_KEY is set (cloud/Render), uses the HF Inference API
+so PyTorch never loads — keeps RAM under 512 MB on free-tier hosts.
+Falls back to local sentence-transformers when no API key is present.
 """
 
 from __future__ import annotations
@@ -15,35 +17,66 @@ from src.core.logging import get_logger
 
 log = get_logger(__name__)
 
-# 384-dim, fast, good quality for code + prose similarity
-_DEFAULT_MODEL = "all-MiniLM-L6-v2"
+_DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+_DEFAULT_MODEL_SHORT = "all-MiniLM-L6-v2"
+
+
+def _use_api() -> bool:
+    from src.core.config import settings
+    return bool(settings.HUGGINGFACE_API_KEY)
 
 
 @lru_cache(maxsize=1)
-def _get_model(model_name: str = _DEFAULT_MODEL):
+def _get_local_model(model_name: str = _DEFAULT_MODEL_SHORT):
     from sentence_transformers import SentenceTransformer
-
     log.info("loading_embedding_model", model=model_name)
     return SentenceTransformer(model_name)
 
 
+def _embed_via_api(texts: list[str]) -> list[list[float]]:
+    import httpx
+    from src.core.config import settings
+
+    resp = httpx.post(
+        f"https://api-inference.huggingface.co/pipeline/feature-extraction/{_DEFAULT_MODEL}",
+        headers={"Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}"},
+        json={"inputs": texts, "options": {"wait_for_model": True}},
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    # HF returns list[list[float]] for batch or list[float] for single
+    if isinstance(data[0], float):
+        data = [data]
+    # Normalize each vector
+    result = []
+    for vec in data:
+        arr = np.array(vec, dtype=float)
+        norm = np.linalg.norm(arr)
+        result.append((arr / norm if norm > 0 else arr).tolist())
+    return result
+
+
 class Embedder:
-    def __init__(self, model_name: str = _DEFAULT_MODEL) -> None:
+    def __init__(self, model_name: str = _DEFAULT_MODEL_SHORT) -> None:
         self.model_name = model_name
 
     def embed(self, text: str) -> list[float]:
-        model = _get_model(self.model_name)
-        vec: np.ndarray = model.encode(text, normalize_embeddings=True)
-        return vec.tolist()
+        return self.embed_batch([text])[0]
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        model = _get_model(self.model_name)
+        if _use_api():
+            # Call HF Inference API in chunks to stay within rate limits
+            results = []
+            for i in range(0, len(texts), 32):
+                results.extend(_embed_via_api(texts[i:i + 32]))
+            return results
+        model = _get_local_model(self.model_name)
         vecs: np.ndarray = model.encode(texts, normalize_embeddings=True, batch_size=32)
         return vecs.tolist()
 
     @staticmethod
     def build_kb_text(title: str, description: str, payload: dict) -> str:
-        """Compose the text blob that gets embedded for a KB entry."""
         parts = [title, description]
         if root_cause := payload.get("root_cause"):
             parts.append(f"Root cause: {root_cause}")

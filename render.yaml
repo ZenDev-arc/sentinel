@@ -2,7 +2,7 @@ services:
   - type: web
     name: sentinel
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-cloud.txt
     startCommand: python main.py serve
     healthCheckPath: /health
     envVars:
